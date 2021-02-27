@@ -16,14 +16,15 @@ int MSGIdentifier=0;
 // CanBoard Inputs
 float Vref=4.95;  //Arduino Voltage level
 int   IATResistor=10000;  //Board TempSensor Resistor
-int   MAFpin=A0;
-int   IATpin = A1;
-int   RPMpin=A2;
-int   TPSpin=A3;
-int   AFRpin=A4;
-int   Boostpin=A5;
+int   MAFPpin=A0;
+int   MAP2pin=A1;
+int   IATpin = A2;
+int   RPMpin=A3;
+int   TPSpin=A4;
+int   AFRpin=A5;
 char  IAT;
 char  MAF;
+
 // Outputs
 int   PWMOutpin=3;
 
@@ -80,7 +81,7 @@ void getMessage ()
 /*=============================================================*/
 void getMAF()
 {
-    int MAFadc=analogRead(MAFpin);
+    int MAFadc=analogRead(MAFPpin);
     float MAFv=MAFadc/1023.0*Vref;
     int MAF256=MAFadc*65535/1023/256;
     char MAF=MAF256;
