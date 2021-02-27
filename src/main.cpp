@@ -16,12 +16,13 @@ int MSGIdentifier=0;
 // CanBoard Inputs
 float Vref=4.95;  //Arduino Voltage level
 int   IATResistor=10000;  //Board TempSensor Resistor
-int   MAFPpin=A0;
-int   MAP2pin=A1;
-int   IATpin = A2;
-int   RPMpin=A3;
-int   TPSpin=A4;
-int   AFRpin=A5;
+
+int   MAFPpin=A0; //Azul
+int   MAP2pin=A1; //Laranja
+int   IATpin = A2; //Verde
+int   TPSpin=A3; //Vermelho
+int   AFRpin=A4; //Branco
+int   RPMpin=A5; //Preto
 
 int D0=D0;  // RX tentar evitar o uso
 int Di1=1;  // TX tentar evita o uso
@@ -29,9 +30,9 @@ int MAF_MAPOn=3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se 
 int MAForMAP=4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre 
 int MAP2On=5;  // Usar MAP2 se ON
 int IATon=6;  // Usar IAT se ON
-int RPMOn=7;  // Usar RPM se ON
-int TPSOn=8;  // Usar TPS se ON
-int AFROn=10; // Usar AFR se ON 
+int TPSOn=7;  // Usar TPS se ON
+int AFROn=8; // Usar AFR se ON 
+int RPMOn=10;  // Usar RPM se ON
 
 char  MAF;
 char MAP2;
