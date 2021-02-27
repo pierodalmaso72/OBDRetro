@@ -22,8 +22,23 @@ int   IATpin = A2;
 int   RPMpin=A3;
 int   TPSpin=A4;
 int   AFRpin=A5;
-char  IAT;
+
+int D0=D0;  // RX tentar evitar o uso
+int Di1=1;  // TX tentar evita o uso
+int MAF_MAPOn=3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
+int MAForMAP=4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre 
+int MAP2On=5;  // Usar MAP2 se ON
+int IATon=6;  // Usar IAT se ON
+int RPMOn=7;  // Usar RPM se ON
+int TPSOn=8;  // Usar TPS se ON
+int AFROn=10; // Usar AFR se ON 
+
 char  MAF;
+char MAP2;
+char  IAT;
+char RPM;
+char TPS;
+char AFR;
 
 // Outputs
 int   PWMOutpin=3;
