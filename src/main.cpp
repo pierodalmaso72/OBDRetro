@@ -3,62 +3,69 @@
 #include <mcp_can_dfs.h>
 #include <SPI.h>
 
-MCP_CAN CAN(9);                                      // Set CS to pin 9
+MCP_CAN CAN(9); // Set CS to pin 9
 unsigned long int canId = 0x000;
 unsigned char len = 0;
 unsigned char buf[8];
 char str[20];
-String BuildMessage="";
-int MSGIdentifier=0;
-
-
+String BuildMessage = "";
+int MSGIdentifier = 0;
 
 // CanBoard Inputs
-float Vref=5.0;  //Arduino Voltage level
-int   IATResistor=10000;  //Board TempSensor Resistor
+float Vref = 5.0;        //Arduino Voltage level
+int IATResistor = 10000; //Board TempSensor Resistor
 
-int   MAFPpin=A0; //Azul
-int   MAP2pin=A1; //Laranja
-int   IATpin = A2; //Verde
-int   TPSpin=A3; //Vermelho
-int   AFRpin=A4; //Branco
-int   RPMpin=A5; //Preto
+int MAFPpin = A0; //Azul
+int MAP2pin = A1; //Laranja
+int IATpin = A2;  //Verde
+int TPSpin = A3;  //Vermelho
+int AFRpin = A4;  //Branco
+int RPMpin = A5;  //Preto
 
 // Outputs
-int rx=0;  // RX tentar evitar o uso
-int tx=1;  // TX tentar evita o uso
-int MAF_MAPon=3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
-int MAForMAP=4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre 
-int MAP2on=5;  // Usar MAP2 se ON
-int IATon=6;  // Usar IAT se ON
-int TPSon=7;  // Usar TPS se ON
-int AFRon=8; // Usar AFR se ON 
-int RPMon=10;  // Usar RPM se ON
+int rx = 0;        // RX tentar evitar o uso
+int tx = 1;        // TX tentar evita o uso
+int MAF_MAPon = 3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
+int MAForMAP = 4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre
+int MAP2on = 5;    // Usar MAP2 se ON
+int IATon = 6;     // Usar IAT se ON
+int TPSon = 7;     // Usar TPS se ON
+int AFRon = 8;     // Usar AFR se ON
+int RPMon = 10;    // Usar RPM se ON
 
 //Broadcast Rates
-int broadcastH=0; // com BDR=10 e HxL=10 40-50HZ/7HZ com  BDR=0 e HxL=10:314HZ/35HZ
-int broadcastL=0;
+int broadcastH = 0; // com BDR=10 e HxL=10 40-50HZ/7HZ com  BDR=0 e HxL=10:314HZ/35HZ
+int broadcastL = 0;
 
 //Calculo do Tempo de resposta millis()
 unsigned long StartTime = 0;
 unsigned long EndTime = 0;
 unsigned long DurationMillis = 0;
 float BroadcastFreq = 0;
-String BDFreqMarker=""; //"MazdaH" "MazdaL" "Response" "Mode1" "Mode22"
+String BDFreqMarker = ""; //"MazdaH" "MazdaL" "Response" "Mode1" "Mode22"
 
 //GLOBALS
-int noMAF;
-int noMAP=1;
-int noMAP2=0;
-int noIAT=0;
-int noTPS=0;
-int noAFR=0;
-int noRPM=0;
-int slowXfastPolling=10;
-int slowPolling=0;
-char  MAF;
+boolean  noMAF;
+bool noMAP = true;
+bool noMAP2 = true;
+bool noIAT = true;
+bool noTPS = true;
+bool noAFR = true;
+bool noRPM = true;
+bool noLoad=true;
+bool noCoolant=true;
+bool novSpeed=true;
+bool noFuelLevel=true;
+bool noCatTemp=true;
+bool noBatteryV=true;
+bool noAmbientTemp=true;
+
+
+int slowXfastPolling = 10;
+int slowPolling = 0;
+char MAF;
 char MAP2;
-char  IAT;
+char IAT;
 char RPM;
 char TPS;
 char AFR;
@@ -74,91 +81,97 @@ FUNCTIONS BELLOW
 ============================================================*/
 void startCAN()
 {
-    // keywords : CAN_250KBPS CAN_500KBPS CAN_1000KBPS
-    START_INIT:
-      if(CAN_OK == CAN.begin(CAN_500KBPS))
-        {Serial.println("CAN BUS Shield init ok!");}
-      else
-      {
-        Serial.println("CAN BUS Shield init fail");
-        Serial.println("Init CAN BUS Shield again");
-        delay(100);
-        goto START_INIT;
-      }
+// keywords : CAN_250KBPS CAN_500KBPS CAN_1000KBPS
+START_INIT:
+  if (CAN_OK == CAN.begin(CAN_500KBPS))
+  {
+    Serial.println("CAN BUS Shield init ok!");
+  }
+  else
+  {
+    Serial.println("CAN BUS Shield init fail");
+    Serial.println("Init CAN BUS Shield again");
+    delay(100);
+    goto START_INIT;
+  }
 }
 /*=============================================================*/
-void getMessage ()
+void getMessage()
 {
-    //unsigned long StartTime = millis();
-    CAN.readMsgBuf(&len, buf);
-    canId = CAN.getCanId();
-    for(int i = 0; i<len; i++)
-      {
-        BuildMessage = BuildMessage + buf[i]+ ",";
-      }
-    Serial.print("<"); Serial.print(canId,HEX);Serial.print(",");
-    Serial.println(BuildMessage);
+  //unsigned long StartTime = millis();
+  CAN.readMsgBuf(&len, buf);
+  canId = CAN.getCanId();
+  for (int i = 0; i < len; i++)
+  {
+    BuildMessage = BuildMessage + buf[i] + ",";
+  }
+  Serial.print("<");
+  Serial.print(canId, HEX);
+  Serial.print(",");
+  Serial.println(BuildMessage);
 }
 /*=============================================================*/
-void CanScan (int startHex, int EndHex, byte *msg, int dlay)
+void CanScan(int startHex, int EndHex, byte *msg, int dlay)
 {
-  for (int id=startHex; id<EndHex;id++)
+  for (int id = startHex; id < EndHex; id++)
   {
     CAN.sendMsgBuf(id, 0, 8, msg);
-    Serial.print("Can ID :  ");  Serial.println(id);
+    Serial.print("Can ID :  ");
+    Serial.println(id);
     delay(dlay);
   }
 }
 /*=============================================================*/
 void CAN_DataFrequency(String mark)
 {
-  if(mark==BDFreqMarker)
+  if (mark == BDFreqMarker)
   {
-    unsigned long t=millis();
-    if(StartTime==0)
+    unsigned long t = millis();
+    if (StartTime == 0)
     {
-      StartTime=t;
-      EndTime=0;
+      StartTime = t;
+      EndTime = 0;
     }
     else
     {
-      EndTime=t;
-      DurationMillis=EndTime-StartTime;
-      BroadcastFreq=1000.0/DurationMillis;
-      Serial.print(mark);Serial.print("- Frequency: ");
+      EndTime = t;
+      DurationMillis = EndTime - StartTime;
+      BroadcastFreq = 1000.0 / DurationMillis;
+      Serial.print(mark);
+      Serial.print("- Frequency: ");
       Serial.print(BroadcastFreq);
       Serial.print("(");
-      Serial.print(DurationMillis);Serial.println(" ms)");
-      StartTime=0;
-      EndTime=0;
-     }
+      Serial.print(DurationMillis);
+      Serial.println(" ms)");
+      StartTime = 0;
+      EndTime = 0;
+    }
   }
 }
 /*=============================================================*/
-void getMAF(int cycles)
+unsigned char getMAF(int cycles)
 {
-    int MAFadc=analogRead(MAFPpin);
-    float MAFv=MAFadc/1023.0*Vref;
-    int MAF256=MAFadc*65535/1023/256;
-    char MAF=MAF256;
-    float MAFreal=MAF256*256.0/100.0;
-    analogWrite(3,MAFadc/4); //gera pwm com duty proporcional ao potenciometro da MAF
-    /*
-    Serial.print("MAF Analog reading ");  Serial.println(MAFadc);
-    Serial.print("MAF Voltage reading "); Serial.println(MAFv);
-    */
+  int MAFadc = analogRead(MAFPpin);
+  float MAFv = MAFadc / 1023.0 * Vref;
+  int MAF256 = MAFadc * 65535 / 1023 / 256;
+  char MAF = MAF256;
+  float MAFreal = MAF256 * 256.0 / 100.0;
+  analogWrite(3, MAFadc / 4); //gera pwm com duty proporcional ao potenciometro da MAF
+  /*
+  Serial.print("MAF Analog reading ");  Serial.println(MAFadc);
+  Serial.print("MAF Voltage reading "); Serial.println(MAFv);
+  */
 }
-/*=============================================================*/
-void getIAT(int cycles)
+unsigned char getIAT(int cycles)
 {
-      int IATadc = analogRead(IATpin);
-      float IATv=IATadc/1023.0*Vref;
-      float IATr=(1023.0/IATadc)-1;
-      IATr= IATResistor/IATr;
-      float IATTemp= 1/(log(IATr/IATResistor)/3950+1/298.15)-273.15;
-      int IATcalc=-IATadc*(8.2/98)+68.07551+40;
-      char IAT=(IATcalc);
-      /*
+  int IATadc = analogRead(IATpin);
+  float IATv = IATadc / 1023.0 * Vref;
+  float IATr = (1023.0 / IATadc) - 1;
+  IATr = IATResistor / IATr;
+  float IATTemp = 1 / (log(IATr / IATResistor) / 3950 + 1 / 298.15) - 273.15;
+  int IATcalc = -IATadc * (8.2 / 98) + 68.07551 + 40;
+  char IAT = (IATcalc);
+  /*
       Serial.print("IAT Analog reading ");  Serial.println(IATadc);
       Serial.print("IAT Voltage reading "); Serial.println(IATv);
       Serial.print("IAT Resistance reading "); Serial.println(IATr);
@@ -167,10 +180,10 @@ void getIAT(int cycles)
       */
 }
 
-void getMAP(byte useMAP2, int cycles){};
-void getTPS(int cycles){};
-void getAFR(int cycles){};
-void getRPM(int typeMeasurement, int cycles){};
+unsigned char getMAP(byte useMAP2, int cycles){};
+unsigned char getTPS(int cycles){};
+unsigned char getAFR(int cycles){};
+unsigned char getRPM(int typeMeasurement, int cycles){};
 unsigned char getEngineLoad(int cycles)
 {
   unsigned char EngineLoad[8] = {4, 65, 4, 0, 0, 0, 0, 0};
@@ -181,19 +194,16 @@ unsigned char getCoolant(int cycles)
   unsigned char CoolantTemp[8] = {4, 65, 5, 0, 0, 185, 147,0};
   return CoolantTemp;
 }
-
 unsigned char getvSpeed(int cycles)
 {
   unsigned char vSpeed[8] = {4, 65, 13, 0, 224, 185, 147, 0};
   return vSpeed;
 } 
-
 unsigned char getFuelLevel(int cycles)
 {
   unsigned char FuelLevel[8] = {4, 65, 47, 0, 224, 185, 147,0 };
   return FuelLevel;
 }
-
 unsigned char getCATTemp(int CAT, int cycles)
 {
     if (CAT==1) {unsigned char CATTemp[8] ={4, 65, 60, 0, 224, 185, 147, 0}; return CATTemp;}
@@ -201,13 +211,11 @@ unsigned char getCATTemp(int CAT, int cycles)
     if (CAT==3) {unsigned char CATTemp[8] ={4, 65, 62, 0, 224, 185, 147, 0}; return CATTemp;}
     if (CAT==4) {unsigned char CATTemp[8] ={4, 65, 63, 0, 224, 185, 147, 0}; return CATTemp;}
 }
-
 unsigned char getBatteryV(int cycles)
 {
   unsigned char BatteryVoltage[8] = {4, 65, 66, 0, 212, 0, 0, 0}; 
   return BatteryVoltage;
 }
-    
 unsigned char getAmbientTemp(int cycles)
 {
   unsigned char AmbientAirTemp[8] = {4, 65, 70, 0, 0, 185, 147, 0};
@@ -248,33 +256,92 @@ unsigned char getAmbientTemp(int cycles)
     */
 }
 
-void setup() {
+void setup()
+{
   // put your setup code here, to run once:
-Serial.begin(115200);
+  Serial.begin(115200);
   startCAN();
-  pinMode(MAF_MAPon,INPUT_PULLUP);
+  pinMode(MAF_MAPon, INPUT_PULLUP);
   pinMode(MAForMAP, INPUT_PULLUP);
-  pinMode (MAP2on,INPUT_PULLUP);
-  pinMode (IATon,INPUT_PULLUP);
-  pinMode (TPSon,INPUT_PULLUP);
-  pinMode (AFRon,INPUT_PULLUP);
+  pinMode(MAP2on, INPUT_PULLUP);
+  pinMode(IATon, INPUT_PULLUP);
+  pinMode(TPSon, INPUT_PULLUP);
+  pinMode(AFRon, INPUT_PULLUP);
   pinMode(RPMon, INPUT_PULLUP);
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  /*
+// put your main code here, to run repeatedly:
+/*
     =============================================================
     loop: GET CAR VALUES OR GENERATE RANDOM FOR TESTS
     =============================================================
   */
-  noMAF=1;
-  noMAP=1;
-  noIAT=1;
-  noTPS=1;
-  noAFR=1;
-  noRPM=1;
-    
+  noMAF=true;
+  noMAP=true;
+  noIAT=true;
+  noTPS=true;
+  noAFR=true;
+  noRPM=true;
+  noLoad=true;
+  noCoolant=true;
+  novSpeed=true;
+  noFuelLevel=true;
+  noCatTemp=true; 
+  noBatteryV=true;
+  noAmbientTemp=true;
+
+/*
+    =============================================================
+    loop: CHECK FOR MSGS AND SEND RESPONSES
+    =============================================================
+    */
+    if(CAN_MSGAVAIL == CAN.checkReceive())
+    {
+      getMessage();
+      //PID answers
+      if(BuildMessage=="2,1,4,0,0,0,0,0,"  && noLoad==false)        {CAN.sendMsgBuf(0x7E8, 0, 8, getEngineLoad(1)); Serial.println(">01 EngineLoad");}
+      if(BuildMessage=="2,1,5,0,0,0,0,0,"  && noCoolant==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCoolantTemp(1)); Serial.println(">01 CoolantTemp");}
+      if(BuildMessage=="2,1,11,0,0,0,0,0," && noMAP==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getMAP(1,1)); Serial.println(">01 MAP");}
+      if(BuildMessage=="2,1,12,0,0,0,0,0," && noRPM==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(1,1)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
+      if(BuildMessage=="2,1,13,0,0,0,0,0," && novSpeed==false)      {CAN.sendMsgBuf(0x7E8, 0, 8, getvSpeed(1)); Serial.println(">01 Speed");}
+      if(BuildMessage=="2,1,15,0,0,0,0,0," && noIAT==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getIAT(1))); Serial.println(">01 IAT");}
+      if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getMAF(1))); Serial.println(">01 MAF");}
+      if(BuildMessage=="2,1,17,0,0,0,0,0," && noTPS==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(1)); Serial.println(">01 TPS");}
+      if(BuildMessage=="2,1,47,0,0,0,0,0," && noFuelLevel=false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getFuelLevel(1)); Serial.println(">01 FuelLev");}
+      if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(1)); Serial.println(">01 AFR");}
+      if(BuildMessage=="2,1,60,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(1,1)); Serial.println(">01 CAT1Temp");}
+      if(BuildMessage=="2,1,61,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(2,1)); Serial.println(">01 CTA2Temp");}
+      if(BuildMessage=="2,1,62,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(3,1)); Serial.println(">01 CAT3Temp");}
+      if(BuildMessage=="2,1,63,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(4,1)); Serial.println(">01 CAT4Temp");}
+      if(BuildMessage=="2,1,66,0,0,0,0,0," && noBatteryV==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getBatteryV(1))); Serial.println(">01 BatteryV");}
+      if(BuildMessage=="2,1,70,0,0,0,0,0," && noAmbientTemp==false) {CAN.sendMsgBuf(0x7E8, 0, 8, getAmbientTemp(1)); Serial.println(">01 AirTemp");}
+      if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getLambdaSensor(1)); Serial.println(">01 Lambda");}
+
+      //Mode0x22 answers
+      if(BuildMessage=="3,34,0,60,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, MazdaCAT1Temp); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
+      if(BuildMessage=="3,34,0,14,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, MazdaADV); Serial.println(">22h IgnAdv");}
+      if(BuildMessage=="3,34,0,67,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, MazdaLoad); Serial.println(">22h Load");}
+      //Mode0x01 PID0x0
+      if(BuildMessage=="2,1,0,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(2); Serial.println(">01 PID0");
+                                                     CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4); Serial.println(">01 PID0 Extra");}
+      if(BuildMessage=="2,1,0,153,153,153,153,153,"){CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(2);  Serial.println(">01 PID0");
+                                                     CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4); Serial.println(">01 PID0 Extra");}
+      if(BuildMessage=="2,1,32,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID20); Serial.println(">01 PID0 0-20h");}
+      if(BuildMessage=="2,1,64,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID40); Serial.println(">01 PID0 20-40h");}
+      if(BuildMessage=="2,1,96,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID60); Serial.println(">01 PID0 40-60h");}
+      if(BuildMessage=="2,1,128,0,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID80); Serial.println(">01 PID0 60-80h");}
+      if(BuildMessage=="2,1,1,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 7, MilCleared); Serial.println(">01 PID1 MIL");}
+
+      BuildMessage="";
+      Serial.println("RESPONSE FINISHED");
+      //CAN_DataFrequency("Response");
+      //delay(25);
+    }
+
+
+
+
   // MAF MAP READING
   byte estadopino=digitalRead(MAF_MAPon);
   if (estadopino==HIGH)
