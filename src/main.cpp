@@ -14,7 +14,7 @@ int MSGIdentifier=0;
 
 
 // CanBoard Inputs
-float Vref=4.95;  //Arduino Voltage level
+float Vref=5.0;  //Arduino Voltage level
 int   IATResistor=10000;  //Board TempSensor Resistor
 
 int   MAFPpin=A0; //Azul
@@ -24,25 +24,16 @@ int   TPSpin=A3; //Vermelho
 int   AFRpin=A4; //Branco
 int   RPMpin=A5; //Preto
 
-int D0=D0;  // RX tentar evitar o uso
-int Di1=1;  // TX tentar evita o uso
-int MAF_MAPOn=3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
-int MAForMAP=4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre 
-int MAP2On=5;  // Usar MAP2 se ON
-int IATon=6;  // Usar IAT se ON
-int TPSOn=7;  // Usar TPS se ON
-int AFROn=8; // Usar AFR se ON 
-int RPMOn=10;  // Usar RPM se ON
-
-char  MAF;
-char MAP2;
-char  IAT;
-char RPM;
-char TPS;
-char AFR;
-
 // Outputs
-int   PWMOutpin=3;
+int rx=0;  // RX tentar evitar o uso
+int tx=1;  // TX tentar evita o uso
+int MAF_MAPon=3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
+int MAForMAP=4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre 
+int MAP2on=5;  // Usar MAP2 se ON
+int IATon=6;  // Usar IAT se ON
+int TPSon=7;  // Usar TPS se ON
+int AFRon=8; // Usar AFR se ON 
+int RPMon=10;  // Usar RPM se ON
 
 //Broadcast Rates
 int broadcastH=0; // com BDR=10 e HxL=10 40-50HZ/7HZ com  BDR=0 e HxL=10:314HZ/35HZ
@@ -56,7 +47,21 @@ float BroadcastFreq = 0;
 String BDFreqMarker=""; //"MazdaH" "MazdaL" "Response" "Mode1" "Mode22"
 
 //GLOBALS
-
+int noMAF;
+int noMAP=1;
+int noMAP2=0;
+int noIAT=0;
+int noTPS=0;
+int noAFR=0;
+int noRPM=0;
+int slowXfastPolling=10;
+int slowPolling=0;
+char  MAF;
+char MAP2;
+char  IAT;
+char RPM;
+char TPS;
+char AFR;
 
 /*=============================================================
 =============================================================
@@ -95,38 +100,6 @@ void getMessage ()
     Serial.println(BuildMessage);
 }
 /*=============================================================*/
-void getMAF()
-{
-    int MAFadc=analogRead(MAFPpin);
-    float MAFv=MAFadc/1023.0*Vref;
-    int MAF256=MAFadc*65535/1023/256;
-    char MAF=MAF256;
-    float MAFreal=MAF256*256.0/100.0;
-    analogWrite(3,MAFadc/4); //gera pwm com duty proporcional ao potenciometro da MAF
-    /*
-    Serial.print("MAF Analog reading ");  Serial.println(MAFadc);
-    Serial.print("MAF Voltage reading "); Serial.println(MAFv);
-    */
-}
-/*=============================================================*/
-void getIAT()
-{
-      int IATadc = analogRead(IATpin);
-      float IATv=IATadc/1023.0*Vref;
-      float IATr=(1023.0/IATadc)-1;
-      IATr= IATResistor/IATr;
-      float IATTemp= 1/(log(IATr/IATResistor)/3950+1/298.15)-273.15;
-      int IATcalc=-IATadc*(8.2/98)+68.07551+40;
-      char IAT=(IATcalc);
-      /*
-      Serial.print("IAT Analog reading ");  Serial.println(IATadc);
-      Serial.print("IAT Voltage reading "); Serial.println(IATv);
-      Serial.print("IAT Resistance reading "); Serial.println(IATr);
-      Serial.print("IAT Temp reading "); Serial.println(IATTemp);
-      Serial.print("IAT Calc "); Serial.println(IATcalc);
-      */
-}
-/*=============================================================*/
 void CanScan (int startHex, int EndHex, byte *msg, int dlay)
 {
   for (int id=startHex; id<EndHex;id++)
@@ -161,25 +134,94 @@ void CAN_DataFrequency(String mark)
      }
   }
 }
+/*=============================================================*/
+void getMAF(int cycles)
+{
+    int MAFadc=analogRead(MAFPpin);
+    float MAFv=MAFadc/1023.0*Vref;
+    int MAF256=MAFadc*65535/1023/256;
+    char MAF=MAF256;
+    float MAFreal=MAF256*256.0/100.0;
+    analogWrite(3,MAFadc/4); //gera pwm com duty proporcional ao potenciometro da MAF
+    /*
+    Serial.print("MAF Analog reading ");  Serial.println(MAFadc);
+    Serial.print("MAF Voltage reading "); Serial.println(MAFv);
+    */
+}
+/*=============================================================*/
+void getIAT(int cycles)
+{
+      int IATadc = analogRead(IATpin);
+      float IATv=IATadc/1023.0*Vref;
+      float IATr=(1023.0/IATadc)-1;
+      IATr= IATResistor/IATr;
+      float IATTemp= 1/(log(IATr/IATResistor)/3950+1/298.15)-273.15;
+      int IATcalc=-IATadc*(8.2/98)+68.07551+40;
+      char IAT=(IATcalc);
+      /*
+      Serial.print("IAT Analog reading ");  Serial.println(IATadc);
+      Serial.print("IAT Voltage reading "); Serial.println(IATv);
+      Serial.print("IAT Resistance reading "); Serial.println(IATr);
+      Serial.print("IAT Temp reading "); Serial.println(IATTemp);
+      Serial.print("IAT Calc "); Serial.println(IATcalc);
+      */
+}
+
+void getMAP(byte useMAP2, int cycles){};
+void getTPS(int cycles) {};
+void getAFR(int cycles) {};
+void getRPM (int typeMeasurement, int cycles) {};
 
 void setup() {
   // put your setup code here, to run once:
 Serial.begin(115200);
-  pinMode(PWMOutpin, OUTPUT);  // configura  o pino como saída
   startCAN();
-
+  pinMode(MAF_MAPon,INPUT_PULLUP);
+  pinMode(MAForMAP, INPUT_PULLUP);
+  pinMode (MAP2on,INPUT_PULLUP);
+  pinMode (IATon,INPUT_PULLUP);
+  pinMode (TPSon,INPUT_PULLUP);
+  pinMode (AFRon,INPUT_PULLUP);
+  pinMode(RPMon, INPUT_PULLUP);
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-/*
+  /*
     =============================================================
     loop: GET CAR VALUES OR GENERATE RANDOM FOR TESTS
     =============================================================
-    */
-    getIAT();
-    getMAF();
-    //VALORES ALEOTORIOS TESTE PARA OBD2
+  */
+  noMAF=1;
+  noMAP=1;
+  noIAT=1;
+  noTPS=1;
+  noAFR=1;
+  noRPM=1;
+    
+  // MAF MAP READING
+  byte estadopino=digitalRead(MAF_MAPon);
+  if (estadopino==HIGH)
+  {
+    estadopino=digitalRead(MAForMAP);
+    if(estadopino==HIGH) {getMAF(1);noMAF=0;}
+    else {estadopino=digitalRead(MAP2on);getMAP(estadopino,1);noMAP=0;}
+  }
+  // IAT SLOW POLLING
+  
+  if(slowPolling==slowXfastPolling)
+  {
+    slowPolling=0;
+    if(digitalRead(IATon)) {noIAT=0;getIAT(1);}
+    if(digitalRead(TPSon)) {noTPS=0;getTPS(1);}
+    if(digitalRead(AFRon)) {noAFR=0;getTPS(1);}
+  }
+  else {slowPolling++;} 
+  if(digitalRead(RPMon)) {noRPM=0;getRPM(1,1);}
+  
+  /* FALTA COMPLETAR AS FUNCOES DE LEITURA MAS ANTES SO CHEGAR MSG E RESPOSTA SE noXXX=0 */
+  
+  //VALORES ALEOTORIOS TESTE PARA OBD2
     char rndCoolantTemp=random(200,255);
     unsigned char rndRPM=random(35,90);
     unsigned char rndSpeed=random(0,255);
