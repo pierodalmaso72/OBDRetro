@@ -168,9 +168,85 @@ void getIAT(int cycles)
 }
 
 void getMAP(byte useMAP2, int cycles){};
-void getTPS(int cycles) {};
-void getAFR(int cycles) {};
-void getRPM (int typeMeasurement, int cycles) {};
+void getTPS(int cycles){};
+void getAFR(int cycles){};
+void getRPM(int typeMeasurement, int cycles){};
+unsigned char getEngineLoad(int cycles)
+{
+  unsigned char EngineLoad[8] = {4, 65, 4, 0, 0, 0, 0, 0};
+  return EngineLoad;
+}
+unsigned char getCoolant(int cycles) 
+{
+  unsigned char CoolantTemp[8] = {4, 65, 5, 0, 0, 185, 147,0};
+  return CoolantTemp;
+}
+
+unsigned char getvSpeed(int cycles)
+{
+  unsigned char vSpeed[8] = {4, 65, 13, 0, 224, 185, 147, 0};
+  return vSpeed;
+} 
+
+unsigned char getFuelLevel(int cycles)
+{
+  unsigned char FuelLevel[8] = {4, 65, 47, 0, 224, 185, 147,0 };
+  return FuelLevel;
+}
+
+unsigned char getCATTemp(int CAT, int cycles)
+{
+    if (CAT==1) {unsigned char CATTemp[8] ={4, 65, 60, 0, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==2) {unsigned char CATTemp[8] ={4, 65, 61, 0, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==3) {unsigned char CATTemp[8] ={4, 65, 62, 0, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==4) {unsigned char CATTemp[8] ={4, 65, 63, 0, 224, 185, 147, 0}; return CATTemp;}
+}
+
+unsigned char getBatteryV(int cycles)
+{
+  unsigned char BatteryVoltage[8] = {4, 65, 66, 0, 212, 0, 0, 0}; 
+  return BatteryVoltage;
+}
+    
+unsigned char getAmbientTemp(int cycles)
+{
+  unsigned char AmbientAirTemp[8] = {4, 65, 70, 0, 0, 185, 147, 0};
+  return AmbientAirTemp;
+}
+
+    unsigned char MAP [8] =               {4, 65, 11, rndMAP, 0, 0, 0, 0};
+    unsigned char RPM [8] =               {4, 65, 12, rndRPM, 0, 0, 0, 0};
+    unsigned char IATSensor[8] =          {4, 65, 15, IAT, 0, 185, 147, 0};
+    unsigned char MAFSensor[8] =          {4, 65, 16, MAF, 0, 185, 147, 0};
+    unsigned char LambdaSensor[8] =       {4, 65, 36, rndLambda, 0, 0, 0, 0};
+  unsigned char TPS[8] = {4, 65, 17, rndTPS, 0, 185, 147, 0};
+    unsigned char AFR[8] =                {4, 65, 52, rndAFR, 224, 185, 147, 0};
+    
+    unsigned char AmbientAirTemp[8] =     {4, 65, 70, rndAmbientAirTemp, 0, 185, 147, 0};
+
+    
+    //MODE 0x22 DATA FOR MAZDA MX5
+    unsigned char MazdaCAT1Temp[8] =      {4, 98, 0, 60, rndCAT1Temp, 1, 1, 1 };
+    unsigned char MazdaADV[8] =           {3, 98, 0, 14, rndAdv, 0, 0, 0 };
+    unsigned char MazdaLoad[8] =          {3, 98, 0, 67, 0, rndLoad, 0, 0 };
+
+    //Mazda ECUS Simulation
+    unsigned char Mazda201[8] =           {rndMazdaRPM, 1, 200 ,200, rndMazdaSpeed, 0, rndMazdaTPS, 0};
+    unsigned char Mazdawheelspeed[8] =    {40, 0,45 ,0, 50, 0, 55, 0};
+    unsigned char MazdaBreak[8] =         {rndMazdaBreakP, 0, rndMazdaBreakSw, 0, 0, 0, 0, 0};
+    unsigned char MazdaCoolant[8] =       {rndCoolantTemp, 0, 0, 0, 0, 0, 0, 0};
+    unsigned char MazdaIAT[8] =           {0, 0, 0, 0, IAT, 0, 0, 0};
+
+    //OBD2 MODE0x01 PID 0 DATA
+    unsigned char SupportedPID00[8] =     {65, 0, 255, 255, 255, 255, 0, 0}; //Perfeito
+    unsigned char SupportedPID20[8] =     {65, 32, 255, 255, 255, 255, 0, 0};    //Perfeito
+    unsigned char SupportedPID40[8] =     {65, 64, 255, 255, 255, 255, 0, 0};
+    unsigned char SupportedPID60[8] =     {65, 96, 255, 255, 255, 254, 0, 0};
+    unsigned char SupportedPID80[8] =     {65, 128, 255, 255, 255, 254, 0, 0};
+    unsigned char SupportedPID00v4[8] =   {4, 65, 0, 255, 255, 255, 254, 0};
+    unsigned char MilCleared[7] =         {4, 65, 63, 34, 224, 185, 147}; 
+    */
+}
 
 void setup() {
   // put your setup code here, to run once:
