@@ -3,7 +3,6 @@
 #include <mcp_can_dfs.h>
 #include <SPI.h>
 
-
 MCP_CAN CAN(9); // Set CS to pin 9
 unsigned long int canId = 0x000;
 unsigned char len = 0;
@@ -12,9 +11,9 @@ char str[20];
 String BuildMessage = "";
 int MSGIdentifier = 0;
 
-// CanBoard Inputs
+// AnalogInputs
 float Vref = 5.0;        //Arduino Voltage level
-int IATResistor = 10000; //Board TempSensor Resistor
+int IATResistor = 10000;  //Board TempSensor Resistor
 
 int MAFPpin = A0; //Azul
 int MAP2pin = A1; //Laranja
@@ -23,7 +22,7 @@ int TPSpin = A3;  //Vermelho
 int AFRpin = A4;  //Branco
 int RPMpin = A5;  //Preto
 
-// Outputs
+// DigitalInputs
 int rx = 0;        // RX tentar evitar o uso
 int tx = 1;        // TX tentar evita o uso
 int MAF_MAPon = 3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
@@ -56,12 +55,6 @@ bool noMazda201=true;
 
 int slowXfastPolling = 10;
 int slowPolling = 0;
-//char MAF;
-//char MAP2;
-//char IAT;
-//char RPM;
-//char TPS;
-//char AFR;
 
 /*FUNCTIONS BELLOW 
 ============================================================*/
@@ -81,7 +74,6 @@ START_INIT:
     goto START_INIT;
   }
 }
-
 void CanScan(int startHex, int EndHex, byte *msg, int dlay)
 {
   for (int id = startHex; id < EndHex; id++)
@@ -92,43 +84,95 @@ void CanScan(int startHex, int EndHex, byte *msg, int dlay)
     delay(dlay);
   }
 }
-
 //Mazdadmode: if False simple OBD Mode0x01 if true sim Mazda mx5 >2005
-unsigned char* getMAF(int cycles)
+void CheckActiveSensors()
 {
-  int MAFadc = analogRead(MAFPpin);
-  //float MAFv = MAFadc / 1023.0 * Vref;
-  //int MAF256 = MAFadc * 65535 / 1023 / 256;
-  //char MAF = MAF256;
-  //float MAFreal = MAF256 * 256.0 / 100.0;
-  //analogWrite(3, MAFadc / 4); //gera pwm com duty proporcional ao potenciometro da MAF
-  /*
-  Serial.print("MAF Analog reading ");  Serial.println(MAFadc);
-  Serial.print("MAF Voltage reading "); Serial.println(MAFv);
-  */
+  bool test=digitalRead(MAF_MAPon);
+  if (test==false) 
+  {
+    test=digitalRead(MAForMAP);
+    if (teste=true) 
+    {
+      noMAF=false;
+      noMAP=true;
+      noMAP2=true;
+      noLoad=false
+    }
+    else 
+    {
+      noMAF=true;
+      noLoad=false;
+      noMAP=false;
+      test=digitalRead(MAP2on);
+      if (teste=false) {noMAP2=false;} 
+    }
+  }
+  else {
+    noMAF=true;
+    noMAP=true;
+  }
+  noIAT=digitalRead(IATon);
+  noTPS=digitalRead(TPSon);
+  noAFR=digitalRead(AFRon);
+  noRPM=digitalRead(AFRon);
 }
-unsigned char* getMAP(bool usemap2, int cycles){};
-unsigned char* getEngineLoad(bool mazdamode,int cycles)
+unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps)
 {
-  unsigned char load=0;
-  if (mazdamode==false) {static unsigned char EngineLoad[8] = {4, 65, 4, load, 0, 0, 0, 0}; return EngineLoad;}
-  else {static unsigned char EngineLoad[8] = {3, 98, 0, 67, 0, load, 0, 0 }; return EngineLoad;} //Mazda MX5 Mode0x22
+  //Get values (1-Check which sensor to use; 2-Retrieve value x cycles; 3-Calculate average value)
+  int v1=0;
+  int v2=0;
+  for (int i = 0; i < reps; i++)
+  {
+    v1=v1+analogRead(MAFPpin);
+    if (noMAP2==false) {v2=analogRead(MAP2pin);}
+    if(reps>1){delay(10);}
+  }
+  v1=v1/reps/4;
+  v2=v2/reps/4;
+  if (noMAP2==false && v1>=255/2) 
+  {
+    v1=v2;
+  }
+  char load=v1; //adjust here for specific car
+  char airflow=v1;
+  if (mazdamode==true)                    {static unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; return Load;}
+  if (mazdamode==false && loadmode==true) {static unsigned char Load[8] = {4, 65, 4, load, 0, 0, 0,0}; return Load;}
+  if (noMAF==false && loadmode==false)    {static unsigned char  MAF[8] = {4, 65, 16, airflow, 0, 185, 147, 0}; return MAF;}
+  if (noMAF==true && loadmode==false)     {static unsigned char  MAP[8] = {4, 65, 11, airflow, 0, 185, 147, 0}; return MAP;}
 }
-unsigned char* getTPS(bool mazdamode,int cycles){};
-unsigned char* getAFR(int cycles){};
-unsigned char* getRPM(bool mazdamode, int rpmtype, int cycles){};
+unsigned char* getTPS(bool mazdamode,int cycles)
+{
+  int v1=0;
+  for (int i = 0; i < reps; i++) {v1=v1+analogRead(TPSpin);if(reps>1){delay(10);}}
+  v1=v1/reps/4;
+  char tps=v1;
+  if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255}; return TPS;}
+  if (mazdamode==false) {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
+}
+unsigned char* getAFR(bool mazdamode, int cycles){};
+{
+  int v1=0;
+  for (int i = 0; i < reps; i++) {v1=v1+analogRead(AFRpin);if(reps>1){delay(10);}}
+  v1=v1/reps/4;
+  char lambda=v1;
+  if (mazdamode==true)  {static unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;}
+  if (mazdamode==false) {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
+}
 unsigned char* getIAT(bool mazdamode, int cycles) 
 {
-  int IATadc = analogRead(IATpin);
-  //float IATv = IATadc / 1023.0 * Vref;
-  //float IATr = (1023.0 / IATadc) - 1;
-  //IATr = IATResistor / IATr;
-  //float IATTemp = 1 / (log(IATr / IATResistor) / 3950 + 1 / 298.15) - 273.15;
-  int IATcalc = -IATadc * (8.2 / 98) + 68.07551 + 40;
-  unsigned char IAT = IATcalc;
-  if (mazdamode==false) {static unsigned char IATSensor[8] = {4, 65, 15, IAT, 0, 185, 147, 0}; return IATSensor;}
-  else {static unsigned char IATSensor[8] = {0, 0, 0, 0, IAT, 0, 0, 0}; return IATSensor;}
+  int v1=0;
+  for (int i = 0; i < reps; i++) {v1=v1+analogRead(IATpin);if(reps>1){delay(10);}}
+  v1=v1/reps;
+  int v1 = -v1 * (8.2 / 98) + 68.07551 + 40;
+  unsigned char iat = v1;
+  if (mazdamode==false) {static unsigned char IATSensor[8] = {4, 65, 15, iat, 0, 185, 147, 0}; return IATSensor;}
+  else {static unsigned char IATSensor[8] = {0, 0, 0, 0, iat 0, 0, 0}; return IATSensor;}
   /*
+  int v1 = analogRead(IATpin);
+  float IATv = v1 / 1023.0 * Vref;
+  float IATr = (1023.0 / v1) - 1;
+  IATr = IATResistor / IATr;
+  float IATTemp = 1 / (log(IATr / IATResistor) / 3950 + 1 / 298.15) - 273.15;
   Serial.print("IAT Analog reading ");  Serial.println(IATadc);
   Serial.print("IAT Voltage reading "); Serial.println(IATv);
   Serial.print("IAT Resistance reading "); Serial.println(IATr);
@@ -136,6 +180,7 @@ unsigned char* getIAT(bool mazdamode, int cycles)
   Serial.print("IAT Calc "); Serial.println(IATcalc);
   */
 }
+unsigned char* getRPM(bool mazdamode, int rpmtype, int cycles){};
 unsigned char* getCoolantTemp(bool mazdamode, int cycles) 
 {
   unsigned char coolanttemp=0;
@@ -198,14 +243,14 @@ void Answer()
   Serial.println(BuildMessage);
 
   //PID answers
-  if(BuildMessage=="2,1,4,0,0,0,0,0,"  && noLoad==false)        {CAN.sendMsgBuf(0x7E8, 0, 8, getEngineLoad(false,1)); Serial.println(">01 EngineLoad");}
+  if(BuildMessage=="2,1,4,0,0,0,0,0,"  && noLoad==false)        {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1)); Serial.println(">01 EngineLoad");}
   if(BuildMessage=="2,1,5,0,0,0,0,0,"  && noCoolant==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCoolantTemp(false,1)); Serial.println(">01 CoolantTemp");}
-  if(BuildMessage=="2,1,11,0,0,0,0,0," && noMAP==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getMAP(1,1)); Serial.println(">01 MAP");}
+  if(BuildMessage=="2,1,11,0,0,0,0,0," && noMAP==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1)); Serial.println(">01 MAP");}
   if(BuildMessage=="2,1,12,0,0,0,0,0," && noRPM==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,1)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
   if(BuildMessage=="2,1,13,0,0,0,0,0," && novSpeed==false)      {CAN.sendMsgBuf(0x7E8, 0, 8, getvSpeed(1)); Serial.println(">01 Speed");}
   if(BuildMessage=="2,1,14,0,0,0,0,0," && noAdvance==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1)); Serial.println(">01 Advance");}
   if(BuildMessage=="2,1,15,0,0,0,0,0," && noIAT==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getIAT(false,1)); Serial.println(">01 IAT");}
-  if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getMAF(1)); Serial.println(">01 MAF");}
+  if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1)); Serial.println(">01 MAF");}
   if(BuildMessage=="2,1,17,0,0,0,0,0," && noTPS==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1)); Serial.println(">01 TPS");}
   if(BuildMessage=="2,1,47,0,0,0,0,0," && noFuelLevel==false)   {CAN.sendMsgBuf(0x7E8, 0, 8, getFuelLevel(1)); Serial.println(">01 FuelLev");}
   if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(1)); Serial.println(">01 AFR");}
@@ -218,9 +263,9 @@ void Answer()
   if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(1)); Serial.println(">01 Lambda");}
 
   //Mode0x22 answers
-  if(BuildMessage=="3,34,0,60,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
-  if(BuildMessage=="3,34,0,14,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1)); Serial.println(">22h IgnAdv");}
-  if(BuildMessage=="3,34,0,67,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, getEngineLoad(true,1)); Serial.println(">22h Load");}
+  if(BuildMessage=="3,34,0,60,0,0,0,0," && noCatTemp==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
+  if(BuildMessage=="3,34,0,14,0,0,0,0," && noAdvance==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1)); Serial.println(">22h IgnAdv");}
+  if(BuildMessage=="3,34,0,67,0,0,0,0," && noLoad==false)       {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(true,true,1)); Serial.println(">22h Load");}
 
 
   //OBD2 MODE0x01 PID 0 DATA
@@ -292,8 +337,8 @@ void MazdaSIM()
     {
       unsigned char* RPM=getRPM(true,3,1);
       unsigned char* TPS=getTPS(true,1);
-      unsigned char rpm= RPM[1];
-      unsigned char tps= TPS[1];
+      unsigned char rpm= RPM[0];
+      unsigned char tps= TPS[0];
       unsigned char mazdaspeed=0;
       unsigned char Mazda201[8] = {rpm, 1, 200 ,200, mazdaspeed, 0, tps, 0};
       CAN.sendMsgBuf(0x201, 0, 8, Mazda201);  
@@ -321,11 +366,11 @@ void MazdaSIM()
     }
 
 }
- //   unsigned char MAP [8] =               {4, 65, 11, rndMAP, 0, 0, 0, 0};
+
  //   unsigned char RPM [8] =               {4, 65, 12, rndRPM, 0, 0, 0, 0};
  //   unsigned char MAFSensor[8] =          {4, 65, 16, MAF, 0, 185, 147, 0};
  //   unsigned char LambdaSensor[8] =       {4, 65, 36, rndLambda, 0, 0, 0, 0};
- //   unsigned char TPS[8] = {4, 65, 17, rndTPS, 0, 185, 147, 0};
+ //   
  //   unsigned char AFR[8] =                {4, 65, 52, rndAFR, 224, 185, 147, 0};
     
     
@@ -347,14 +392,7 @@ void setup()
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  noMAF=true;
-  noMAP=true;
-  noIAT=true;
-  noTPS=true;
-  noAFR=true;
-  noRPM=true;
-  noLoad=true;
+  // change to false for non sensor based data
   noCoolant=true;
   novSpeed=true;
   noFuelLevel=true;
@@ -362,25 +400,12 @@ void loop() {
   noBatteryV=true;
   noAmbientTemp=true;
   noAdvance=true;
-  /*=============================================================
-    loop: CHECK FOR MSGS AND SEND RESPONSES
-  =============================================================*/
-    if(CAN_MSGAVAIL == CAN.checkReceive())
-    {
-      Answer();
-      BuildMessage="";
-      Serial.println("RESPONSE FINISHED");
-      //CAN_DataFrequency("Response");
-      //delay(25);
-    }
+
+  CheckActiveSensors()
+
+
   // MAF MAP READING
-  byte estadopino=digitalRead(MAF_MAPon);
-  if (estadopino==HIGH)
-  {
-    estadopino=digitalRead(MAForMAP);
-    if(estadopino==HIGH) {getMAF(1);noMAF=0;}
-    else {estadopino=digitalRead(MAP2on);getMAP(estadopino,1);noMAP=0;}
-  }
+  
   // IAT SLOW POLLING
   
   if(slowPolling==slowXfastPolling)
@@ -392,6 +417,19 @@ void loop() {
   }
   else {slowPolling++;} 
   if(digitalRead(RPMon)) {noRPM=0;getRPM(false,1,1);}
+
+  /*=============================================================
+    loop: CHECK FOR MSGS AND SEND RESPONSES
+  =============================================================*/
+    if(CAN_MSGAVAIL == CAN.checkReceive())
+    {
+      Answer();
+      BuildMessage="";
+      Serial.println("RESPONSE FINISHED");
+      //CAN_DataFrequency("Response");
+      //delay(25);
+    }
+  
   
   //MAZDA MX5 >2005 SPECIFIC FUNCTIONS
   //bool MazdaSim=true;
