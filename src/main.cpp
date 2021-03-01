@@ -91,12 +91,12 @@ void CheckActiveSensors()
   if (test==false) 
   {
     test=digitalRead(MAForMAP);
-    if (teste=true) 
+    if (test=true) 
     {
       noMAF=false;
       noMAP=true;
       noMAP2=true;
-      noLoad=false
+      noLoad=false;
     }
     else 
     {
@@ -104,7 +104,7 @@ void CheckActiveSensors()
       noLoad=false;
       noMAP=false;
       test=digitalRead(MAP2on);
-      if (teste=false) {noMAP2=false;} 
+      if (test=false) {noMAP2=false;} 
     }
   }
   else {
@@ -140,7 +140,7 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps)
   if (noMAF==false && loadmode==false)    {static unsigned char  MAF[8] = {4, 65, 16, airflow, 0, 185, 147, 0}; return MAF;}
   if (noMAF==true && loadmode==false)     {static unsigned char  MAP[8] = {4, 65, 11, airflow, 0, 185, 147, 0}; return MAP;}
 }
-unsigned char* getTPS(bool mazdamode,int cycles)
+unsigned char* getTPS(bool mazdamode,int reps)
 {
   int v1=0;
   for (int i = 0; i < reps; i++) {v1=v1+analogRead(TPSpin);if(reps>1){delay(10);}}
@@ -149,16 +149,16 @@ unsigned char* getTPS(bool mazdamode,int cycles)
   if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255}; return TPS;}
   if (mazdamode==false) {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
 }
-unsigned char* getAFR(bool mazdamode, int cycles){};
+unsigned char* getAFR(bool mazdamode, int reps)
 {
   int v1=0;
   for (int i = 0; i < reps; i++) {v1=v1+analogRead(AFRpin);if(reps>1){delay(10);}}
   v1=v1/reps/4;
   char lambda=v1;
-  if (mazdamode==true)  {static unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;}
+  if (mazdamode==true)  {static unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;} //!!Verificar PID
   if (mazdamode==false) {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
 }
-unsigned char* getIAT(bool mazdamode, int cycles) 
+unsigned char* getIAT(bool mazdamode, int reps) 
 {
   int v1=0;
   for (int i = 0; i < reps; i++) {v1=v1+analogRead(IATpin);if(reps>1){delay(10);}}
@@ -166,7 +166,7 @@ unsigned char* getIAT(bool mazdamode, int cycles)
   int v1 = -v1 * (8.2 / 98) + 68.07551 + 40;
   unsigned char iat = v1;
   if (mazdamode==false) {static unsigned char IATSensor[8] = {4, 65, 15, iat, 0, 185, 147, 0}; return IATSensor;}
-  else {static unsigned char IATSensor[8] = {0, 0, 0, 0, iat 0, 0, 0}; return IATSensor;}
+  else {static unsigned char IATSensor[8] = {0, 0, 0, 0, iat, 0, 0, 0}; return IATSensor;}
   /*
   int v1 = analogRead(IATpin);
   float IATv = v1 / 1023.0 * Vref;
@@ -253,14 +253,14 @@ void Answer()
   if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1)); Serial.println(">01 MAF");}
   if(BuildMessage=="2,1,17,0,0,0,0,0," && noTPS==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1)); Serial.println(">01 TPS");}
   if(BuildMessage=="2,1,47,0,0,0,0,0," && noFuelLevel==false)   {CAN.sendMsgBuf(0x7E8, 0, 8, getFuelLevel(1)); Serial.println(">01 FuelLev");}
-  if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(1)); Serial.println(">01 AFR");}
+  if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(false,1)); Serial.println(">01 AFR");}
   if(BuildMessage=="2,1,60,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,1,1)); Serial.println(">01 CAT1Temp");}
   if(BuildMessage=="2,1,61,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,2,1)); Serial.println(">01 CTA2Temp");}
   if(BuildMessage=="2,1,62,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,3,1)); Serial.println(">01 CAT3Temp");}
   if(BuildMessage=="2,1,63,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,4,1)); Serial.println(">01 CAT4Temp");}
   if(BuildMessage=="2,1,66,0,0,0,0,0," && noBatteryV==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getBatteryV(1)); Serial.println(">01 BatteryV");}
   if(BuildMessage=="2,1,70,0,0,0,0,0," && noAmbientTemp==false) {CAN.sendMsgBuf(0x7E8, 0, 8, getAmbientTemp(1)); Serial.println(">01 AirTemp");}
-  if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(1)); Serial.println(">01 Lambda");}
+  if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(true,1)); Serial.println(">01 Lambda");}
 
   //Mode0x22 answers
   if(BuildMessage=="3,34,0,60,0,0,0,0," && noCatTemp==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
@@ -401,7 +401,7 @@ void loop() {
   noAmbientTemp=true;
   noAdvance=true;
 
-  CheckActiveSensors()
+  CheckActiveSensors();
 
 
   // MAF MAP READING
