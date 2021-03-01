@@ -408,15 +408,7 @@ void loop() {
   
   // IAT SLOW POLLING
   
-  if(slowPolling==slowXfastPolling)
-  {
-    slowPolling=0;
-    if(digitalRead(IATon)) {noIAT=0;getIAT(false,1);}
-    if(digitalRead(TPSon)) {noTPS=0;getTPS(false,1);}
-    if(digitalRead(AFRon)) {noAFR=0;getAFR(1);}
-  }
-  else {slowPolling++;} 
-  if(digitalRead(RPMon)) {noRPM=0;getRPM(false,1,1);}
+  
 
   /*=============================================================
     loop: CHECK FOR MSGS AND SEND RESPONSES
