@@ -113,6 +113,7 @@ void Pulse_Event()  // The interrupt runs this to calculate the period between p
     PeriodSum = PeriodSum + PeriodBetweenPulses;  // Add the periods so later we can average.
   }
 
+Serial.println("Interrupt Processed!");
 }  // End of Pulse_Event.
 
 void startCAN() // keywords : CAN_250KBPS CAN_500KBPS CAN_1000KBPS
@@ -173,6 +174,48 @@ void CheckActiveSensors()
   noTPS=digitalRead(TPSon);
   noAFR=digitalRead(AFRon);
   noRPM=digitalRead(AFRon);
+  Serial.println("CheckActiveSensore: Done !");
+}
+
+int RPMCalc() 
+{
+  LastTimeCycleMeasure = LastTimeWeMeasured;  // Store the LastTimeWeMeasured in a variable.
+  CurrentMicros = micros();  // Store the micros() in a variable.
+  if(CurrentMicros < LastTimeCycleMeasure)
+  {
+    LastTimeCycleMeasure = CurrentMicros;
+  }
+  // Calculate the frequency:
+  FrequencyRaw = 10000000000 / PeriodAverage;  // Calculate the frequency using the period between pulses.
+  // Detect if pulses stopped or frequency is too low, so we can show 0 Frequency:
+  if(PeriodBetweenPulses > ZeroTimeout - ZeroDebouncingExtra || CurrentMicros - LastTimeCycleMeasure > ZeroTimeout - ZeroDebouncingExtra)
+  {  // If the pulses are too far apart that we reached the timeout for zero:
+    FrequencyRaw = 0;  // Set frequency as 0.
+    ZeroDebouncingExtra = 2000;  // Change the threshold a little so it doesn't bounce.
+  }
+  else
+  {
+    ZeroDebouncingExtra = 0;  // Reset the threshold to the normal value so it doesn't bounce.
+  }
+  FrequencyReal = FrequencyRaw / 10000;  // Get frequency without decimals.
+  // Calculate the RPM:
+  RPM = FrequencyRaw / PulsesPerRevolution * 60;  // Frequency divided by amount of pulses per revolution multiply by 60 seconds to get minutes.
+  RPM = RPM / 10000;  // Remove the decimals.
+  // Smoothing RPM:
+  total = total - readings[readIndex];  // Advance to the next position in the array.
+  readings[readIndex] = RPM;  // Takes the value that we are going to smooth.
+  total = total + readings[readIndex];  // Add the reading to the total.
+  readIndex = readIndex + 1;  // Advance to the next position in the array.
+  if (readIndex >= numReadings)  // If we're at the end of the array:
+  {
+    readIndex = 0;  // Reset array index.
+  }
+  // Calculate the average:
+  average = total / numReadings;  // The average value it's the smoothed result.
+  average2=round(average)/10; // para so mostar dezenas
+  average2=average2*10;
+  Serial.print(average2); Serial.println(" RPM");
+  return average2;
 }
 
 unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
@@ -184,7 +227,7 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
   unsigned char airflow=0;
   for (int i = 0; i < reps; i++)
   {
-    int temp=analogRead(MAFPpin);
+    temp=analogRead(MAFPpin);
     v1=v1+analogRead(MAFPpin);
     if (noMAP2==false) 
     {temp=analogRead(MAP2pin);v2=analogRead(MAP2pin);}
@@ -208,7 +251,7 @@ unsigned char* getTPS(bool mazdamode,int reps, bool demo)
   unsigned char tps=0;
   for (int i = 0; i < reps; i++) 
   {
-    int temp=analogRead(TPSpin);
+    temp=analogRead(TPSpin);
     v1=v1+analogRead(TPSpin);
     if(reps>1){delay(10);}
     }
@@ -226,7 +269,7 @@ unsigned char* getLambda(bool mazdamode, int reps, bool demo)
   unsigned char lambda=0;
   for (int i = 0; i < reps; i++) 
   {
-    int temp=analogRead(AFRpin);
+    temp=analogRead(AFRpin);
     v1=v1+analogRead(AFRpin);
     if(reps>1){delay(10);}
   }
@@ -244,7 +287,7 @@ unsigned char* getIAT(bool mazdamode, int reps, bool demo)
   unsigned char iat=0;
   for (int i = 0; i < reps; i++)
   {
-    int temp=analogRead(IATpin);
+    temp=analogRead(IATpin);
     v1=v1+analogRead(IATpin);
     if(reps>1){delay(10);}
     }
@@ -259,9 +302,8 @@ unsigned char* getIAT(bool mazdamode, int reps, bool demo)
 unsigned char* getRPM(bool mazdamode, int rpmtype, int rep, bool demo)
 {
   int v1=0;
-  int temp;
   unsigned char rpm=0;
-  rpm=average2;
+  rpm=RPMCalc();
   if (demo==true) {rpm=random(35,90);} 
   if (mazdamode==true)  {static unsigned char RPM[8] = {rpm, 255, 255, 255, 255, 255, 255, 255}; return RPM;}
   else {static unsigned char RPM[8] = {4, 65, 12, rpm, 0, 0, 0, 0}; return RPM;}
@@ -395,8 +437,6 @@ void Answer()
   if(BuildMessage=="2,1,96,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID60); Serial.println(">01 PID0 40-60h");}
   if(BuildMessage=="2,1,128,0,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID80); Serial.println(">01 PID0 60-80h");}
   if(BuildMessage=="2,1,1,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 7, MilCleared); Serial.println(">01 PID1 MIL");}
-
-
 }
 
 //Calculo do Tempo de resposta millis()
@@ -477,6 +517,7 @@ void MazdaSIM()
 
 }
 
+
 void setup()
 {
   Serial.begin(115200);
@@ -502,45 +543,20 @@ void loop() {
   noAmbientTemp=true;
   noAdvance=true;
   
-  LastTimeCycleMeasure = LastTimeWeMeasured;  // Store the LastTimeWeMeasured in a variable.
-  CurrentMicros = micros();  // Store the micros() in a variable.
-  if(CurrentMicros < LastTimeCycleMeasure)
-  {
-    LastTimeCycleMeasure = CurrentMicros;
-  }
-  // Calculate the frequency:
-  FrequencyRaw = 10000000000 / PeriodAverage;  // Calculate the frequency using the period between pulses.
-  // Detect if pulses stopped or frequency is too low, so we can show 0 Frequency:
-  if(PeriodBetweenPulses > ZeroTimeout - ZeroDebouncingExtra || CurrentMicros - LastTimeCycleMeasure > ZeroTimeout - ZeroDebouncingExtra)
-  {  // If the pulses are too far apart that we reached the timeout for zero:
-    FrequencyRaw = 0;  // Set frequency as 0.
-    ZeroDebouncingExtra = 2000;  // Change the threshold a little so it doesn't bounce.
-  }
-  else
-  {
-    ZeroDebouncingExtra = 0;  // Reset the threshold to the normal value so it doesn't bounce.
-  }
-  FrequencyReal = FrequencyRaw / 10000;  // Get frequency without decimals.
-  // Calculate the RPM:
-  RPM = FrequencyRaw / PulsesPerRevolution * 60;  // Frequency divided by amount of pulses per revolution multiply by 60 seconds to get minutes.
-  RPM = RPM / 10000;  // Remove the decimals.
-  // Smoothing RPM:
-  total = total - readings[readIndex];  // Advance to the next position in the array.
-  readings[readIndex] = RPM;  // Takes the value that we are going to smooth.
-  total = total + readings[readIndex];  // Add the reading to the total.
-  readIndex = readIndex + 1;  // Advance to the next position in the array.
-  if (readIndex >= numReadings)  // If we're at the end of the array:
-  {
-    readIndex = 0;  // Reset array index.
-  }
-  // Calculate the average:
-  average = total / numReadings;  // The average value it's the smoothed result.
-  average2=round(average)/10; // para so mostar dezenas
-  average2=average2*10;
-  Serial.print(average2); Serial.println(" RPM");
+  
+  delay (500);
 
   CheckActiveSensors();//check which AD inputs are active in board
-    if(CAN_MSGAVAIL == CAN.checkReceive())
+  //TEST MODE OVERIDE!!!
+  //bool noMAF=false;
+  //bool noMAP = false;
+  //bool noMAP2 = false;
+  bool noIAT = false;
+  //bool noTPS = false;
+  //bool noAFR = false;
+  //bool noRPM = false;
+  
+  if(CAN_MSGAVAIL == CAN.checkReceive())
   {
     Answer();
     BuildMessage="";
