@@ -1,3 +1,11 @@
+/*
+Includes code from 'Tachometer using micros' from InterlinkKnight Last update: 05/23/2019
+used to count the frequency for RPM
+
+
+Mazdadmode: if False simple OBD Mode0x01 if true sim Mazda mx5 >2005
+*/
+
 #include <Arduino.h>
 #include <mcp_can.h>
 #include <mcp_can_dfs.h>
@@ -11,6 +19,30 @@ char str[20];
 String BuildMessage = "";
 int MSGIdentifier = 0;
 
+// RPM Calibration:
+byte const PulsesPerRevolution = 4;  // Set how many pulses there are on each revolution. Default: 2.
+const unsigned long ZeroTimeout = 200000;  // For high response time, a good value would be 100000. For reading very low RPM, a good value would be 300000.
+byte const numReadings = 4;  // Calibration for smoothing RPM: Number of samples for smoothing. The higher, the more smoothing, but it's going to react slower to changes. 1 = no smoothing. Default: 2.
+// RPM Variables:
+volatile unsigned long LastTimeWeMeasured;  // Stores the last time we measured a pulse so we can calculate the period.
+volatile unsigned long PeriodBetweenPulses = ZeroTimeout+1000;  // Stores the period between pulses in microseconds.// It has a big number so it doesn't start with 0 which would be interpreted as a high frequency.
+volatile unsigned long PeriodAverage = ZeroTimeout+1000;  // Stores the period between pulses in microseconds in total, if we are taking multiple pulses.// It has a big number so it doesn't start with 0 which would be interpreted as a high frequency.
+unsigned long FrequencyRaw;  // Calculated frequency, based on the period. This has a lot of extra decimals without the decimal point.
+unsigned long FrequencyReal;  // Frequency without decimals.
+unsigned long RPM;  // Raw RPM without any processing.
+unsigned int PulseCounter = 1;  // Counts the amount of pulse readings we took so we can average multiple pulses before calculating the period.
+unsigned long PeriodSum; // Stores the summation of all the periods to do the average.
+unsigned long LastTimeCycleMeasure = LastTimeWeMeasured;  // Stores the last time we measure a pulse in that cycle.
+unsigned long CurrentMicros = micros();  // Stores the micros in that cycle.
+unsigned int AmountOfReadings = 1;
+unsigned int ZeroDebouncingExtra;  // Stores the extra value added to the ZeroTimeout to debounce it.
+// RPM Variables for smoothing tachometer:
+unsigned long readings[numReadings];  // The input.
+unsigned long readIndex;  // The index of the current reading.
+unsigned long total;  // The running total.
+unsigned long average;  // The RPM value after applying the smoothing.
+int average2;  // limpar ... The RPM value after applying the smoothing.
+
 // AnalogInputs
 float Vref = 5.0;        //Arduino Voltage level
 int IATResistor = 10000;  //Board TempSensor Resistor
@@ -20,12 +52,12 @@ int MAP2pin = A1; //Laranja
 int IATpin = A2;  //Verde
 int TPSpin = A3;  //Vermelho
 int AFRpin = A4;  //Branco
-int RPMpin = A5;  //Preto
+int RPMpin = 3;  //Preto Must be this pin to use free interrupt for RPM counting
 
 // DigitalInputs
 int rx = 0;        // RX tentar evitar o uso
 int tx = 1;        // TX tentar evita o uso
-int MAF_MAPon = 3; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
+int MAF_MAPon = A5; // Usar MAP/MF se ON e Liberta A1 para entrada analog livre se OFF
 int MAForMAP = 4;  //MAF ou MAP : ON = MAF e Liberta A1 para entrada analog livre
 int MAP2on = 5;    // Usar MAP2 se ON
 int IATon = 6;     // Usar IAT se ON
@@ -58,9 +90,33 @@ int slowPolling = 0;
 
 /*FUNCTIONS BELLOW 
 ============================================================*/
-void startCAN()
+void Pulse_Event()  // The interrupt runs this to calculate the period between pulses:
 {
-// keywords : CAN_250KBPS CAN_500KBPS CAN_1000KBPS
+
+  PeriodBetweenPulses = micros() - LastTimeWeMeasured;  // Current "micros" minus the old "micros" when the last pulse happens. the period (microseconds) between both pulses. avoids the overflow of the "micros".
+  LastTimeWeMeasured = micros();  // Stores the current micros so the next time we have a pulse we would have something to compare with.
+  if(PulseCounter >= AmountOfReadings)  // If counter for amount of readings reach the set limit:
+  {
+    PeriodAverage = PeriodSum / AmountOfReadings;  // Calculate the final period dividing the sum of all readings by the
+                                                   // amount of readings to get the average.
+    PulseCounter = 1;  // Reset the counter to start over. The reset value is 1 because its the minimum setting allowed (1 reading).
+    PeriodSum = PeriodBetweenPulses;  // Reset PeriodSum to start a new averaging operation.
+
+    // Change the amount of readings depending on the period between pulses. To be very responsive, ideally we should read every pulse but at Higher speeds .... 
+    int RemapedAmountOfReadings = map(PeriodBetweenPulses, 40000, 5000, 1, 10);  // Remap the period range to the reading range.
+    RemapedAmountOfReadings = constrain(RemapedAmountOfReadings, 1, 10);  // Constrain the value so it doesn't go below or above the limits.
+    AmountOfReadings = RemapedAmountOfReadings;  // Set amount of readings as the remaped value.
+  }
+  else
+  {
+    PulseCounter++;  // Increase the counter for amount of readings by 1.
+    PeriodSum = PeriodSum + PeriodBetweenPulses;  // Add the periods so later we can average.
+  }
+
+}  // End of Pulse_Event.
+
+void startCAN() // keywords : CAN_250KBPS CAN_500KBPS CAN_1000KBPS
+{
 START_INIT:
   if (CAN_OK == CAN.begin(CAN_500KBPS))
   {
@@ -74,6 +130,7 @@ START_INIT:
     goto START_INIT;
   }
 }
+
 void CanScan(int startHex, int EndHex, byte *msg, int dlay)
 {
   for (int id = startHex; id < EndHex; id++)
@@ -84,14 +141,15 @@ void CanScan(int startHex, int EndHex, byte *msg, int dlay)
     delay(dlay);
   }
 }
-//Mazdadmode: if False simple OBD Mode0x01 if true sim Mazda mx5 >2005
+
+
 void CheckActiveSensors()
 {
   bool test=digitalRead(MAF_MAPon);
   if (test==false) 
   {
     test=digitalRead(MAForMAP);
-    if (test=true) 
+    if (test==true) 
     {
       noMAF=false;
       noMAP=true;
@@ -104,7 +162,7 @@ void CheckActiveSensors()
       noLoad=false;
       noMAP=false;
       test=digitalRead(MAP2on);
-      if (test=false) {noMAP2=false;} 
+      if (test==false) {noMAP2=false;} 
     }
   }
   else {
@@ -116,118 +174,169 @@ void CheckActiveSensors()
   noAFR=digitalRead(AFRon);
   noRPM=digitalRead(AFRon);
 }
-unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps)
+
+unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
 {
-  //Get values (1-Check which sensor to use; 2-Retrieve value x cycles; 3-Calculate average value)
   int v1=0;
   int v2=0;
+  int temp;
+  unsigned char load=0;
+  unsigned char airflow=0;
   for (int i = 0; i < reps; i++)
   {
+    int temp=analogRead(MAFPpin);
     v1=v1+analogRead(MAFPpin);
-    if (noMAP2==false) {v2=analogRead(MAP2pin);}
+    if (noMAP2==false) 
+    {temp=analogRead(MAP2pin);v2=analogRead(MAP2pin);}
     if(reps>1){delay(10);}
   }
   v1=v1/reps/4;
   v2=v2/reps/4;
-  if (noMAP2==false && v1>=255/2) 
-  {
-    v1=v2;
-  }
-  char load=v1; //adjust here for specific car
-  char airflow=v1;
+  if (noMAP2==false && v1>=255/2) {v1=v2;}
+  load=v1; airflow=v1;
+  if (demo==true) {load=random(0,25); airflow=load;}  
   if (mazdamode==true)                    {static unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; return Load;}
   if (mazdamode==false && loadmode==true) {static unsigned char Load[8] = {4, 65, 4, load, 0, 0, 0,0}; return Load;}
   if (noMAF==false && loadmode==false)    {static unsigned char  MAF[8] = {4, 65, 16, airflow, 0, 185, 147, 0}; return MAF;}
   if (noMAF==true && loadmode==false)     {static unsigned char  MAP[8] = {4, 65, 11, airflow, 0, 185, 147, 0}; return MAP;}
 }
-unsigned char* getTPS(bool mazdamode,int reps)
+
+unsigned char* getTPS(bool mazdamode,int reps, bool demo)
 {
   int v1=0;
-  for (int i = 0; i < reps; i++) {v1=v1+analogRead(TPSpin);if(reps>1){delay(10);}}
+  int temp;
+  unsigned char tps=0;
+  for (int i = 0; i < reps; i++) 
+  {
+    int temp=analogRead(TPSpin);
+    v1=v1+analogRead(TPSpin);
+    if(reps>1){delay(10);}
+    }
   v1=v1/reps/4;
-  char tps=v1;
+  tps=v1;
+  if (demo==true) {tps=random(0,200);}  
   if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255}; return TPS;}
-  if (mazdamode==false) {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
+  else {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
 }
-unsigned char* getAFR(bool mazdamode, int reps)
+
+unsigned char* getLambda(bool mazdamode, int reps, bool demo)
 {
   int v1=0;
-  for (int i = 0; i < reps; i++) {v1=v1+analogRead(AFRpin);if(reps>1){delay(10);}}
+  int temp;
+  unsigned char lambda=0;
+  for (int i = 0; i < reps; i++) 
+  {
+    int temp=analogRead(AFRpin);
+    v1=v1+analogRead(AFRpin);
+    if(reps>1){delay(10);}
+  }
   v1=v1/reps/4;
-  char lambda=v1;
+  lambda=v1;
+  if (demo==true) {lambda=random(120,130);} 
   if (mazdamode==true)  {static unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;} //!!Verificar PID
-  if (mazdamode==false) {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
-}
-unsigned char* getIAT(bool mazdamode, int reps) 
+  else {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
+  }
+  
+unsigned char* getIAT(bool mazdamode, int reps, bool demo) 
 {
   int v1=0;
-  for (int i = 0; i < reps; i++) {v1=v1+analogRead(IATpin);if(reps>1){delay(10);}}
+  int temp;
+  unsigned char iat=0;
+  for (int i = 0; i < reps; i++)
+  {
+    int temp=analogRead(IATpin);
+    v1=v1+analogRead(IATpin);
+    if(reps>1){delay(10);}
+    }
   v1=v1/reps;
-  int v1 = -v1 * (8.2 / 98) + 68.07551 + 40;
-  unsigned char iat = v1;
+  v1 = -v1 * (8.2 / 98) + 68.07551 + 40;
+  iat=v1;
+  if (demo==true) {iat=random(0,255);} 
   if (mazdamode==false) {static unsigned char IATSensor[8] = {4, 65, 15, iat, 0, 185, 147, 0}; return IATSensor;}
   else {static unsigned char IATSensor[8] = {0, 0, 0, 0, iat, 0, 0, 0}; return IATSensor;}
-  /*
-  int v1 = analogRead(IATpin);
-  float IATv = v1 / 1023.0 * Vref;
-  float IATr = (1023.0 / v1) - 1;
-  IATr = IATResistor / IATr;
-  float IATTemp = 1 / (log(IATr / IATResistor) / 3950 + 1 / 298.15) - 273.15;
-  Serial.print("IAT Analog reading ");  Serial.println(IATadc);
-  Serial.print("IAT Voltage reading "); Serial.println(IATv);
-  Serial.print("IAT Resistance reading "); Serial.println(IATr);
-  Serial.print("IAT Temp reading "); Serial.println(IATTemp);
-  Serial.print("IAT Calc "); Serial.println(IATcalc);
-  */
 }
-unsigned char* getRPM(bool mazdamode, int rpmtype, int cycles){};
-unsigned char* getCoolantTemp(bool mazdamode, int cycles) 
+
+unsigned char* getRPM(bool mazdamode, int rpmtype, int rep, bool demo)
+{
+  int v1=0;
+  int temp;
+  unsigned char rpm=0;
+  rpm=average2;
+  if (demo==true) {rpm=random(35,90);} 
+  if (mazdamode==true)  {static unsigned char RPM[8] = {rpm, 255, 255, 255, 255, 255, 255, 255}; return RPM;}
+  else {static unsigned char RPM[8] = {4, 65, 12, rpm, 0, 0, 0, 0}; return RPM;}
+};
+
+unsigned char* getCoolantTemp(bool mazdamode, int rep, bool demo) 
 {
   unsigned char coolanttemp=0;
+  if (demo==true) {coolanttemp=random(200,255);}
   if (mazdamode==false) {static unsigned char CoolantTemp[8] = {4, 65, 5, coolanttemp, 0, 185, 147,0}; return CoolantTemp;}
   else {static unsigned char CoolantTemp[8] = {coolanttemp, 0, 0, 0, 0, 0, 0, 0}; return CoolantTemp;}
 }
-unsigned char* getvSpeed(int cycles)
+
+unsigned char* getvSpeed(int rep, bool demo)
 {
-  static unsigned char vSpeed[8] = {4, 65, 13, 0, 224, 185, 147, 0};
-  return vSpeed;
+  unsigned char vspeed=0;
+  if (demo==true) {vspeed=random(0,255);}
+  static unsigned char VSpeed[8] = {4, 65, 13, vspeed, 224, 185, 147, 0}; return VSpeed;
 } 
-unsigned char* getFuelLevel(int cycles)
+
+unsigned char* getFuelLevel(int rep, bool demo)
 {
-  static unsigned char FuelLevel[8] = {4, 65, 47, 0, 224, 185, 147,0 };
+  unsigned char fuel=0;
+  if (demo==true) {fuel=random(0,255);}
+  static unsigned char FuelLevel[8] = {4, 65, 47, fuel, 224, 185, 147,0 };
   return FuelLevel;
 }
-unsigned char* getCATTemp(bool mazdamode,int CAT, int cycles)
+
+unsigned char* getCATTemp(bool mazdamode,int CAT, int rep, bool demo)
 { 
+  
+  unsigned char cattemp=0;
+  if (demo==true) {cattemp=random(1,255);}
   if (mazdamode==false) 
   {
-    if (CAT==1) {static unsigned char CATTemp[8] ={4, 65, 60, 0, 224, 185, 147, 0}; return CATTemp;}
-    if (CAT==2) {static unsigned char CATTemp[8] ={4, 65, 61, 0, 224, 185, 147, 0}; return CATTemp;}
-    if (CAT==3) {static unsigned char CATTemp[8] ={4, 65, 62, 0, 224, 185, 147, 0}; return CATTemp;}
-    if (CAT==4) {static unsigned char CATTemp[8] ={4, 65, 63, 0, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==1) {static unsigned char CATTemp[8] ={4, 65, 60, cattemp, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==2) {static unsigned char CATTemp[8] ={4, 65, 61, cattemp, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==3) {static unsigned char CATTemp[8] ={4, 65, 62, cattemp, 224, 185, 147, 0}; return CATTemp;}
+    if (CAT==4) {static unsigned char CATTemp[8] ={4, 65, 63, cattemp, 224, 185, 147, 0}; return CATTemp;}
   }
-  else {static unsigned char CATTemp[8] = {4, 98, 0, 60, 0, 1, 1, 1 }; return CATTemp;} //Mazda MX5 mode 0x22h
+  else {static unsigned char CATTemp[8] = {4, 98, 0, 60, cattemp, 1, 1, 1 }; return CATTemp;} //Mazda MX5 mode 0x22h
 }
-unsigned char* getBatteryV(int cycles)
+
+unsigned char* getBatteryV(int rep, bool demo)
 {
-  static unsigned char BatteryVoltage[8] = {4, 65, 66, 0, 212, 0, 0, 0}; 
+  static char bv=0;
+  if (demo==true) {bv=random(48,48);}
+  static unsigned char BatteryVoltage[8] = {4, 65, 66, bv, 212, 0, 0, 0}; 
   return BatteryVoltage;
 }
-unsigned char* getAmbientTemp(int cycles)
+
+unsigned char* getAmbientTemp(int rep, bool demo)
 {
-  static unsigned char AmbientAirTemp[8] = {4, 65, 70, 0, 0, 185, 147, 0};
+  static char at=0;
+  if (demo==true) {at=random(1,200);}
+  static unsigned char AmbientAirTemp[8] = {4, 65, 70, at, 0, 185, 147, 0};
   return AmbientAirTemp;
 }
-unsigned char* getAdvance(bool mazdamode,int cycles)
+
+unsigned char* getAdvance(bool mazdamode,int rep, bool demo)
 {
   unsigned char advance=0;
+  if (demo==true) {advance=random(110,155);}
   if (mazdamode==false) {static unsigned char Advance[8] = {4, 65, 14, advance, 0, 185, 147,0}; return Advance;}
   else {static unsigned char Advance[8] = {advance, 0, 0, 0, 0, 0, 0, 0}; return Advance;}
 }
-unsigned char* getBreakPressure(bool mazdamode, int cycles)
-{
 
+unsigned char* getBreakData(int rep, bool demo)
+{
+  unsigned char bp=0;
+  unsigned char bs=0;
+  if (demo==true) {bp=random(0,100);bs=200*random(0,1);}
+  static unsigned char BreakD[8] = {bp, 0, bs, 0, 0, 0, 0, 0}; return BreakD;
 }
+
 void Answer()
 {
   //unsigned long StartTime = millis();
@@ -243,29 +352,29 @@ void Answer()
   Serial.println(BuildMessage);
 
   //PID answers
-  if(BuildMessage=="2,1,4,0,0,0,0,0,"  && noLoad==false)        {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1)); Serial.println(">01 EngineLoad");}
-  if(BuildMessage=="2,1,5,0,0,0,0,0,"  && noCoolant==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCoolantTemp(false,1)); Serial.println(">01 CoolantTemp");}
-  if(BuildMessage=="2,1,11,0,0,0,0,0," && noMAP==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1)); Serial.println(">01 MAP");}
-  if(BuildMessage=="2,1,12,0,0,0,0,0," && noRPM==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,1)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
-  if(BuildMessage=="2,1,13,0,0,0,0,0," && novSpeed==false)      {CAN.sendMsgBuf(0x7E8, 0, 8, getvSpeed(1)); Serial.println(">01 Speed");}
-  if(BuildMessage=="2,1,14,0,0,0,0,0," && noAdvance==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1)); Serial.println(">01 Advance");}
-  if(BuildMessage=="2,1,15,0,0,0,0,0," && noIAT==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getIAT(false,1)); Serial.println(">01 IAT");}
-  if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1)); Serial.println(">01 MAF");}
-  if(BuildMessage=="2,1,17,0,0,0,0,0," && noTPS==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1)); Serial.println(">01 TPS");}
-  if(BuildMessage=="2,1,47,0,0,0,0,0," && noFuelLevel==false)   {CAN.sendMsgBuf(0x7E8, 0, 8, getFuelLevel(1)); Serial.println(">01 FuelLev");}
-  if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(false,1)); Serial.println(">01 AFR");}
-  if(BuildMessage=="2,1,60,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,1,1)); Serial.println(">01 CAT1Temp");}
-  if(BuildMessage=="2,1,61,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,2,1)); Serial.println(">01 CTA2Temp");}
-  if(BuildMessage=="2,1,62,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,3,1)); Serial.println(">01 CAT3Temp");}
-  if(BuildMessage=="2,1,63,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,4,1)); Serial.println(">01 CAT4Temp");}
-  if(BuildMessage=="2,1,66,0,0,0,0,0," && noBatteryV==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getBatteryV(1)); Serial.println(">01 BatteryV");}
-  if(BuildMessage=="2,1,70,0,0,0,0,0," && noAmbientTemp==false) {CAN.sendMsgBuf(0x7E8, 0, 8, getAmbientTemp(1)); Serial.println(">01 AirTemp");}
-  if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAFR(true,1)); Serial.println(">01 Lambda");}
+  if(BuildMessage=="2,1,4,0,0,0,0,0,"  && noLoad==false)        {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1, false)); Serial.println(">01 EngineLoad");}
+  if(BuildMessage=="2,1,5,0,0,0,0,0,"  && noCoolant==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCoolantTemp(false,1,false)); Serial.println(">01 CoolantTemp");}
+  if(BuildMessage=="2,1,11,0,0,0,0,0," && noMAP==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1,false)); Serial.println(">01 MAP");}
+  if(BuildMessage=="2,1,12,0,0,0,0,0," && noRPM==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,1,false)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
+  if(BuildMessage=="2,1,13,0,0,0,0,0," && novSpeed==false)      {CAN.sendMsgBuf(0x7E8, 0, 8, getvSpeed(1,false)); Serial.println(">01 Speed");}
+  if(BuildMessage=="2,1,14,0,0,0,0,0," && noAdvance==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1,false)); Serial.println(">01 Advance");}
+  if(BuildMessage=="2,1,15,0,0,0,0,0," && noIAT==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getIAT(false,1,false)); Serial.println(">01 IAT");}
+  if(BuildMessage=="2,1,16,0,0,0,0,0," && noMAF==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); Serial.println(">01 MAF");}
+  if(BuildMessage=="2,1,17,0,0,0,0,0," && noTPS==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1,false)); Serial.println(">01 TPS");}
+  if(BuildMessage=="2,1,47,0,0,0,0,0," && noFuelLevel==false)   {CAN.sendMsgBuf(0x7E8, 0, 8, getFuelLevel(1,false)); Serial.println(">01 FuelLev");}
+  if(BuildMessage=="2,1,52,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,1,false)); Serial.println(">01 AFR");}
+  if(BuildMessage=="2,1,60,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,1,1,false)); Serial.println(">01 CAT1Temp");}
+  if(BuildMessage=="2,1,61,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,2,1,false)); Serial.println(">01 CTA2Temp");}
+  if(BuildMessage=="2,1,62,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,3,1,false)); Serial.println(">01 CAT3Temp");}
+  if(BuildMessage=="2,1,63,0,0,0,0,0," && noCatTemp==false)     {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,4,1,false)); Serial.println(">01 CAT4Temp");}
+  if(BuildMessage=="2,1,66,0,0,0,0,0," && noBatteryV==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getBatteryV(1,false)); Serial.println(">01 BatteryV");}
+  if(BuildMessage=="2,1,70,0,0,0,0,0," && noAmbientTemp==false) {CAN.sendMsgBuf(0x7E8, 0, 8, getAmbientTemp(1,false)); Serial.println(">01 AirTemp");}
+  if(BuildMessage=="2,1,36,0,0,0,0,0," && noAFR==false)         {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(true,1,false)); Serial.println(">01 Lambda");}
 
   //Mode0x22 answers
-  if(BuildMessage=="3,34,0,60,0,0,0,0," && noCatTemp==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
-  if(BuildMessage=="3,34,0,14,0,0,0,0," && noAdvance==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1)); Serial.println(">22h IgnAdv");}
-  if(BuildMessage=="3,34,0,67,0,0,0,0," && noLoad==false)       {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(true,true,1)); Serial.println(">22h Load");}
+  if(BuildMessage=="3,34,0,60,0,0,0,0," && noCatTemp==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1,false)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
+  if(BuildMessage=="3,34,0,14,0,0,0,0," && noAdvance==false)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1,false)); Serial.println(">22h IgnAdv");}
+  if(BuildMessage=="3,34,0,67,0,0,0,0," && noLoad==false)       {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(true,true,1,false)); Serial.println(">22h Load");}
 
 
   //OBD2 MODE0x01 PID 0 DATA
@@ -296,6 +405,7 @@ unsigned long EndTime = 0;
 unsigned long DurationMillis = 0;
 float BroadcastFreq = 0;
 String BDFreqMarker = ""; //"MazdaH" "MazdaL" "Response" "Mode1" "Mode22"
+
 void CAN_DataFrequency(String mark)
 {
   if (mark == BDFreqMarker)
@@ -335,8 +445,8 @@ void MazdaSIM()
   {
     if(noMazda201==false) 
     {
-      unsigned char* RPM=getRPM(true,3,1);
-      unsigned char* TPS=getTPS(true,1);
+      unsigned char* RPM=getRPM(true,3,1,false);
+      unsigned char* TPS=getTPS(true,1,false);
       unsigned char rpm= RPM[0];
       unsigned char tps= TPS[0];
       unsigned char mazdaspeed=0;
@@ -344,9 +454,9 @@ void MazdaSIM()
       CAN.sendMsgBuf(0x201, 0, 8, Mazda201);  
       Serial.println("SentH: RPM,TPS, SPEED");
     }
-    if (noBreakPressure=false)
+    if (noBreakPressure==false)
     {  
-      CAN.sendMsgBuf(0x85, 0, 8, getBreakPressure(true,1)); 
+      CAN.sendMsgBuf(0x85, 0, 8, getBreakData(1,false)); 
       Serial.println("SentH: Break data");
       sendLcounter++;
       sendHcounter=0;
@@ -359,29 +469,19 @@ void MazdaSIM()
     if(sendLcounter==SendLxHRate)
 
     {
-      CAN.sendMsgBuf(0x421, 0, 8, getCoolantTemp(true,1)); Serial.println("SentL: CoolantTemp");
-      CAN.sendMsgBuf(0x240, 0, 8, getIAT(true,1)); Serial.println("SentL: IAT");
+      CAN.sendMsgBuf(0x421, 0, 8, getCoolantTemp(true,1,false)); Serial.println("SentL: CoolantTemp");
+      CAN.sendMsgBuf(0x240, 0, 8, getIAT(true,1,false)); Serial.println("SentL: IAT");
       sendLcounter=0;
     //CAN_DataFrequency("MazdaL");
     }
 
 }
 
- //   unsigned char RPM [8] =               {4, 65, 12, rndRPM, 0, 0, 0, 0};
- //   unsigned char MAFSensor[8] =          {4, 65, 16, MAF, 0, 185, 147, 0};
- //   unsigned char LambdaSensor[8] =       {4, 65, 36, rndLambda, 0, 0, 0, 0};
- //   
- //   unsigned char AFR[8] =                {4, 65, 52, rndAFR, 224, 185, 147, 0};
-    
-    
-    //MODE 0x22 DATA FOR MAZDA MX5
-  //  unsigned char MazdaADV[8] =           {3, 98, 0, 14, rndAdv, 0, 0, 0 };
-
 void setup()
 {
-  // put your setup code here, to run once:
   Serial.begin(115200);
   startCAN();
+  attachInterrupt(digitalPinToInterrupt(RPMpin), Pulse_Event, FALLING);  // Enable interruption pin 2 when going from HIGH to LOW.
   pinMode(MAF_MAPon, INPUT_PULLUP);
   pinMode(MAForMAP, INPUT_PULLUP);
   pinMode(MAP2on, INPUT_PULLUP);
@@ -389,6 +489,7 @@ void setup()
   pinMode(TPSon, INPUT_PULLUP);
   pinMode(AFRon, INPUT_PULLUP);
   pinMode(RPMon, INPUT_PULLUP);
+  delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings stored we need a high enough value in micros() so if divided is not going to give negative values.
 }
 
 void loop() {
@@ -400,27 +501,53 @@ void loop() {
   noBatteryV=true;
   noAmbientTemp=true;
   noAdvance=true;
-
-  CheckActiveSensors();
-
-
-  // MAF MAP READING
   
-  // IAT SLOW POLLING
-  
-  
+  LastTimeCycleMeasure = LastTimeWeMeasured;  // Store the LastTimeWeMeasured in a variable.
+  CurrentMicros = micros();  // Store the micros() in a variable.
+  if(CurrentMicros < LastTimeCycleMeasure)
+  {
+    LastTimeCycleMeasure = CurrentMicros;
+  }
+  // Calculate the frequency:
+  FrequencyRaw = 10000000000 / PeriodAverage;  // Calculate the frequency using the period between pulses.
+  // Detect if pulses stopped or frequency is too low, so we can show 0 Frequency:
+  if(PeriodBetweenPulses > ZeroTimeout - ZeroDebouncingExtra || CurrentMicros - LastTimeCycleMeasure > ZeroTimeout - ZeroDebouncingExtra)
+  {  // If the pulses are too far apart that we reached the timeout for zero:
+    FrequencyRaw = 0;  // Set frequency as 0.
+    ZeroDebouncingExtra = 2000;  // Change the threshold a little so it doesn't bounce.
+  }
+  else
+  {
+    ZeroDebouncingExtra = 0;  // Reset the threshold to the normal value so it doesn't bounce.
+  }
+  FrequencyReal = FrequencyRaw / 10000;  // Get frequency without decimals.
+  // Calculate the RPM:
+  RPM = FrequencyRaw / PulsesPerRevolution * 60;  // Frequency divided by amount of pulses per revolution multiply by 60 seconds to get minutes.
+  RPM = RPM / 10000;  // Remove the decimals.
+  // Smoothing RPM:
+  total = total - readings[readIndex];  // Advance to the next position in the array.
+  readings[readIndex] = RPM;  // Takes the value that we are going to smooth.
+  total = total + readings[readIndex];  // Add the reading to the total.
+  readIndex = readIndex + 1;  // Advance to the next position in the array.
+  if (readIndex >= numReadings)  // If we're at the end of the array:
+  {
+    readIndex = 0;  // Reset array index.
+  }
+  // Calculate the average:
+  average = total / numReadings;  // The average value it's the smoothed result.
+  average2=round(average)/10; // para so mostar dezenas
+  average2=average2*10;
+  Serial.print(average2); Serial.println(" RPM");
 
-  /*=============================================================
-    loop: CHECK FOR MSGS AND SEND RESPONSES
-  =============================================================*/
+  CheckActiveSensors();//check which AD inputs are active in board
     if(CAN_MSGAVAIL == CAN.checkReceive())
-    {
-      Answer();
-      BuildMessage="";
-      Serial.println("RESPONSE FINISHED");
-      //CAN_DataFrequency("Response");
-      //delay(25);
-    }
+  {
+    Answer();
+    BuildMessage="";
+    Serial.println("RESPONSE FINISHED");
+    //CAN_DataFrequency("Response");
+    //delay(25);
+  }
   
   
   //MAZDA MX5 >2005 SPECIFIC FUNCTIONS
@@ -428,27 +555,18 @@ void loop() {
   bool MazdaSim=false;
   bool sCAN=false;
   //MAZDASIM: BROADCAST MAZDA FORMAT DATA TO CAN_BUS
-  
-  if(MazdaSim==true)
-  {
-    MazdaSIM();
-  }
-  
-    /*
-    =============================================================
-    loop: SCAN IDs - RESPONDING IDs ON AIM
-    =============================================================*/
-    if(sCAN==true)
+  if(MazdaSim==true) {MazdaSIM();}
+  //loop: SCAN IDs - RESPONDING IDs ON AIM
+  if(sCAN==true)
     {
       byte Mazdatest[8] = {200,0,0,0,0,0,0,0};
       CanScan( 0x0, 0xFF, Mazdatest, 5);
     }
-
 }
 
 
   /*//VALORES ALEOTORIOS TESTE PARA OBD2
-    char rndCoolantTemp=random(200,255);
+    unsigned char rndCoolantTemp=,false;
     unsigned char rndRPM=random(35,90);
     unsigned char rndSpeed=random(0,255);
     unsigned char rndIAT=random(0,255);
