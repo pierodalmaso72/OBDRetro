@@ -77,6 +77,18 @@ const bool sCAN=false;
 
 /*FUNCTIONS ARE BELLOW (SOME NOT USED ARE IN END OF FILE)
 ============================================================*/
+// Serial.println (unsigned char array)
+void printA (unsigned char myStr[8]) 
+{
+  String msg="";
+  for (int i = 0; i < 8 - 1; i++) 
+  {
+    msg=msg+myStr[i] + ",";
+  }
+    Serial.println(msg);
+    delay(10);
+}
+
 void Pulse_Event()  // The interrupt runs this to calculate the period between pulses:
 {
 
@@ -210,11 +222,11 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
   v2=v2/reps/4;
   if (inputisClutchSW==false && v1>=255/2) {v1=v2;}
   load=v1; airflow=v1;
-  if (demo==true) {load=random(0,25); airflow=load;}  
-  if (mazdamode==true)                    {static unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; return Load;}
-  if (mazdamode==false && loadmode==true) {static unsigned char Load[8] = {4, 65, 4, load, 0, 0, 0,0}; return Load;}
-  if (inputisClutchSW==false && loadmode==false)    {static unsigned char  MAF[8] = {4, 65, 16, airflow, 0, 185, 147, 0}; return MAF;}
-  if (inputisClutchSW==true && loadmode==false)     {static unsigned char  MAP[8] = {4, 65, 11, airflow, 0, 185, 147, 0}; return MAP;}
+  if (demo==true) {load=random(0,25); airflow=load;};//Serial.println(airflow); 
+  if (mazdamode==true)                    {unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; printA(Load); return Load;}
+  if (mazdamode==false && loadmode==true) {unsigned char Load[8] = {4, 65, 4, load, 0, 0, 0,0}; printA(Load);return Load;}
+  if (inputisClutchSW==false && loadmode==false)    {unsigned char  MAF[8] = {4, 65, 16, airflow, 224, 185, 147, 0};printA(MAF); return MAF;}
+  if (inputisClutchSW==true && loadmode==false)     {unsigned char  MAP[8] = {4, 65, 11, airflow, 224, 185, 147, 0};printA(MAP); return MAP;}
 }
 
 unsigned char* getTPS(bool mazdamode,int reps, bool demo)
@@ -231,8 +243,8 @@ unsigned char* getTPS(bool mazdamode,int reps, bool demo)
   v1=v1/reps/4;
   tps=v1;
   if (demo==true) {tps=random(0,200);}  
-  if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255}; return TPS;}
-  else {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
+  if (mazdamode==true)  {unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255}; return TPS;}
+  else {unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0}; return TPS;}
 }
 
 unsigned char* getLambda(bool mazdamode, int reps, bool demo)
@@ -249,8 +261,8 @@ unsigned char* getLambda(bool mazdamode, int reps, bool demo)
   v1=v1/reps/4;
   lambda=v1;
   if (demo==true) {lambda=random(120,130);} 
-  if (mazdamode==true)  {static unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;} //!!Verificar PID
-  else {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
+  if (mazdamode==true)  {unsigned char Lambda[8] = {4, 65, 52, lambda, 224, 185, 147, 0}; return Lambda;} //!!Verificar PID
+  else {unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; return Lambda;}
   }
   
 unsigned char* getIAT(bool mazdamode, int reps, bool demo) 
@@ -269,8 +281,8 @@ unsigned char* getIAT(bool mazdamode, int reps, bool demo)
   v1=-v1/4+255;
   iat=v1;
   if (demo==true) {iat=-random(0,255)+255;} 
-  if (mazdamode==false) {static unsigned char IATSensor[8] = {4, 65, 15, iat, 0, 185, 147, 0}; Serial.println(iat); return IATSensor;}
-  else {static unsigned char IATSensor[8] = {0, 0, 0, 0, iat, 0, 0, 0}; return IATSensor;}
+  if (mazdamode==false) {unsigned char IATSensor[8] = {4, 65, 15, iat, 0, 185, 147, 0}; Serial.println(iat); return IATSensor;}
+  else {unsigned char IATSensor[8] = {0, 0, 0, 0, iat, 0, 0, 0}; return IATSensor;}
 }
 
 unsigned char* getRPM(bool mazdamode, int reps, bool demo)
@@ -279,8 +291,8 @@ unsigned char* getRPM(bool mazdamode, int reps, bool demo)
   unsigned char rpm=0;
   rpm=RPMCalc();
   if (demo==true) {rpm=random(35,90);} 
-  if (mazdamode==true)  {static unsigned char RPM[8] = {rpm, 255, 255, 255, 255, 255, 255, 255}; return RPM;}
-  else {static unsigned char RPM[8] = {4, 65, 12, rpm, 0, 0, 0, 0}; return RPM;}
+  if (mazdamode==true)  {unsigned char RPM[8] = {rpm, 255, 255, 255, 255, 255, 255, 255}; return RPM;}
+  else {unsigned char RPM[8] = {4, 65, 12, rpm, 0, 0, 0, 0}; return RPM;}
 };
 
 unsigned char* getCoolantTemp(bool mazdamode, int reps, bool demo) 
@@ -299,8 +311,8 @@ unsigned char* getCoolantTemp(bool mazdamode, int reps, bool demo)
   v1=-v1/4+255;
   coolanttemp=v1;
   if (demo==true) {coolanttemp=-random(0,255)+255;} 
-  if (mazdamode==false) {static unsigned char CoolantTemp[8] = {4, 65, 5, coolanttemp, 0, 185, 147,0}; return CoolantTemp;}
-  else {static unsigned char CoolantTemp[8] = {coolanttemp, 0, 0, 0, 0, 0, 0, 0}; return CoolantTemp;}
+  if (mazdamode==false) {unsigned char CoolantTemp[8] = {4, 65, 5, coolanttemp, 0, 185, 147,0}; return CoolantTemp;}
+  else {unsigned char CoolantTemp[8] = {coolanttemp, 0, 0, 0, 0, 0, 0, 0}; return CoolantTemp;}
 }
 
 unsigned char* getAdvance(bool mazdamode,int reps, bool demo)
@@ -317,8 +329,8 @@ unsigned char* getAdvance(bool mazdamode,int reps, bool demo)
   v1=v1/reps/4;
   advance=v1;
   if (demo==true) {advance=random(110,155);}
-  if (mazdamode==false) {static unsigned char Advance[8] = {4, 65, 14, advance, 0, 185, 147,0}; return Advance;}
-  else {static unsigned char Advance[8] = {advance, 0, 0, 0, 0, 0, 0, 0}; return Advance;}
+  if (mazdamode==false) {unsigned char Advance[8] = {4, 65, 14, advance, 0, 185, 147,0}; return Advance;}
+  else {unsigned char Advance[8] = {advance, 0, 0, 0, 0, 0, 0, 0}; return Advance;}
 }
 
 unsigned char* getBreakData(int reps, bool demo)
@@ -336,7 +348,7 @@ unsigned char* getBreakData(int reps, bool demo)
   v1=v1/reps/4;
   if (inputisBRKSwitch) {bs=v1;} else {bp=v1;}
   if (demo==true) {bp=random(0,100);bs=200*random(0,1);}
-  static unsigned char BreakD[8] = {bp, 0, bs, 0, 0, 0, 0, 0}; return BreakD;
+  unsigned char BreakD[8] = {bp, 0, bs, 0, 0, 0, 0, 0}; return BreakD;
 }
 
 void CANAnswer()
@@ -348,6 +360,8 @@ void CANAnswer()
   {
     BuildMessage = BuildMessage + buf[i] + ",";
   }
+
+
   Serial.print("<");
   Serial.print(canId, HEX);
   Serial.print(",");
@@ -360,7 +374,7 @@ void CANAnswer()
   //if(BuildMessage=="2,1,12,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,false)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
   //if(BuildMessage=="2,1,14,0,0,0,0,0," && inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1,false)); Serial.println(">01 Advance");}
   //if(BuildMessage=="2,1,15,0,0,0,0,0," && !inputisCoolantTemp){Serial.println("inside IAT answer");CAN.sendMsgBuf(0x7E8, 0, 8, getIAT(false,1,false)); Serial.println(">01 IAT");}
-  //if(BuildMessage=="2,1,16,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); Serial.println(">01 MAF");}
+  if(BuildMessage=="2,1,16,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); Serial.println(">01 MAF");}
   //if(BuildMessage=="2,1,17,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1,false)); Serial.println(">01 TPS");}
   //if(BuildMessage=="2,1,52,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,1,false)); Serial.println(">01 AFR");}
   //if(BuildMessage=="2,1,36,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(true,1,false)); Serial.println(">01 Lambda");}
@@ -509,7 +523,7 @@ void setup()
 
 void loop() 
 {
-  delay (1000);
+  delay (20);
 
   //TEST MODE OVERRIDING readsensorDip  
   // readSensorDipswitch();//check which AD inputs are active in board
