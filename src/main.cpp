@@ -26,21 +26,6 @@ const int TPSpin = A3;  //Vermelho TPS signal in A3 (0-5V signal)
 const int AFRpin = A4;  //Branco AFR signal in A4 (0-5V signal)
 const int BRKPressurePin= A5;  //Preto BreakPressure
 
-// DigitalInputs
-const int RPMpin = 3;  //Preto: Must be this pin to use free interrupt for RPM counting
-
-//Digital Outputs
-const int RPMLimiterpin=8; //verde: testar pois parece afectado pelo estado do pin D7
-
-//Digital Outputs Internal connection to 74HC165
-int loadPin=7; //Branco: HC1-Parallel Load when low shift when High 
-int clockEnablePin=4;//Amarelo: HC15-CE or ClockInhibit when High, no changes in output
-int dataInPin=5; //Laranja: HC7-Q7 Complementary Serial Output (negated)
-int clockINPin=6;//Azul: HC-2CP
-
-//GLOBALS
-bool answering=false;
-bool sending=false;
 //DIP Switch : ON is OV and OFF is 5V from pullups. Logic value is inverted in 74HC165 reading.
 bool inputisAdvance=false; //ergo: is not MAP/MAF; logic value=!DIP[0]; inputA0
 bool inputisMAP=false; //ergo: is not MAF; logic value = DIP[1] inputA0
@@ -50,6 +35,22 @@ bool inputisBRKSwitch=false; //ergo: is not BRKPressure; logic value = DIP[4]; s
 bool useRPMLimiter=false; //logic value =!DIP[5]; software
 bool mazdaECUOn=false; //logic value = !DIP[6]; sofware
 bool rpmfromIGN=false; //ergo: RPM fromECU; logicvalue = DIP[7]; software
+
+// DigitalInputs
+const int RPMpin = 3;  //Preto: Must be this pin to use free interrupt for RPM counting
+
+//Digital Outputs
+const int RPMLimiterpin=8; //verde: testar pois parece afectado pelo estado do pin D7
+
+//Digital Outputs Internal connection to 74HC165
+int loadPin=7; //Pin7 Branco: HC1-Parallel Load when low shift when High 
+int clockEnablePin=4;//Pin 4 Amarelo: HC15-CE or ClockInhibit when High, no changes in output
+int dataInPin=5; //Pin 5 Laranja: HC7-Q7 Complementary Serial Output (negated)
+int clockINPin=6;//Pin6 Azul: HC-2CP
+
+//GLOBALS
+bool answering=false;
+bool sending=false;
 
 const bool sCAN=false;
 
@@ -76,6 +77,7 @@ unsigned long readIndex;  // The index of the current reading.
 unsigned long total;  // The running total.
 unsigned long average;  // The RPM value after applying the smoothing.
 int average2;  // limpar ... The RPM value after applying the smoothing.
+int currentRPM=0;
 
 
 /*FUNCTIONS ARE BELLOW (SOME NOT USED ARE IN END OF FILE)
@@ -147,14 +149,24 @@ void readSensorDipswitch ()
   byte Dipswitch1=shiftIn(dataInPin, clockINPin, MSBFIRST);
   digitalWrite(clockEnablePin, HIGH);
 //Set vars with dipswitches state
-inputisAdvance = ! bitRead(Dipswitch1,0); //Serial.print(inputisAdvance);  
-inputisMAP = bitRead(Dipswitch1,1); //Serial.print(inputisMAP); 
-inputisClutchSW = ! bitRead(Dipswitch1,2); //Serial.print(inputisClutchSW);
-inputisCoolantTemp = bitRead(Dipswitch1,3); //Serial.print(inputisCoolantTemp);
-inputisBRKSwitch = bitRead(Dipswitch1,4); //Serial.print(inputisBRKSwitch);
-useRPMLimiter = ! bitRead(Dipswitch1,5); //Serial.print(useRPMLimiter);
-mazdaECUOn = ! bitRead(Dipswitch1,6); //Serial.print(mazdaECUOn);
-rpmfromIGN = bitRead(Dipswitch1,7); //Serial.println(rpmfromIGN);
+inputisAdvance = bitRead(Dipswitch1,0);// ! bitRead(Dipswitch1,0); 
+inputisMAP = bitRead(Dipswitch1,1); 
+inputisClutchSW = bitRead(Dipswitch1,2);//! bitRead(Dipswitch1,2); 
+inputisCoolantTemp = bitRead(Dipswitch1,3); 
+inputisBRKSwitch = bitRead(Dipswitch1,4);
+useRPMLimiter = !bitRead(Dipswitch1,5); //! bitRead(Dipswitch1,5); 
+mazdaECUOn =!bitRead(Dipswitch1,6);// ! bitRead(Dipswitch1,6); 
+rpmfromIGN = bitRead(Dipswitch1,7); 
+
+/*Serial.print(inputisAdvance);  
+Serial.print(inputisMAP); 
+Serial.print(inputisClutchSW);
+Serial.print(inputisCoolantTemp);
+Serial.print(inputisBRKSwitch);
+Serial.print(useRPMLimiter);
+Serial.print(mazdaECUOn);
+Serial.println(rpmfromIGN);
+delay(2000);*/
 }
 
 int RPMCalc() 
@@ -214,7 +226,7 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
   unsigned char airflow=0;
   for (int i = 0; i < reps; i++)
   {
-    temp=analogRead(MAFMAPpin);
+    //temp=analogRead(MAFMAPpin);
     v1=v1+analogRead(MAFMAPpin);
     if (inputisClutchSW==false) 
     {temp=analogRead(MAP2pin);v2=analogRead(MAP2pin);}
@@ -226,7 +238,7 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
   load=v1; airflow=v1;
   if (demo==true) {load=random(0,25); airflow=load;};//Serial.println(airflow); 
   if (mazdamode==true) 
-    {static unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; printA(Load); return Load;}
+    {static unsigned char Load[8] ={3, 98, 0, 67, 0, load, 0, 0 }; Load[5]=load; return Load;}
   if (mazdamode==false && loadmode==true) 
     {static unsigned char Load[8] = {4, 65, 4, load, 0, 0, 0, 0,};Load[3]=load;return Load;}
   if (inputisMAP==false && loadmode==false)    
@@ -235,48 +247,6 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
     {static unsigned char  MAP[8] = {4, 65, 11, airflow, 224, 185, 147, 0}; MAP[3]=airflow; return MAP;}
 }
 
-unsigned char* getTPS(bool mazdamode,int reps, bool demo)
-{
-  int v1=0;
-  int temp;
-  unsigned char tps=0;
-  for (int i = 0; i < reps; i++) 
-  {
-    temp=analogRead(TPSpin);
-    v1=v1+analogRead(TPSpin);
-    if(reps>1){delay(10);}
-    }
-  v1=v1/reps/4;
-  tps=v1;
-  if (demo==true) {tps=random(0,200);} //Serial.println(tps); 
-  if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255};TPS[0]=tps; return TPS;}
-  else {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0};TPS[3]=tps; return TPS;}
-}
-
-unsigned char* getLambda(bool mazdamode, int pid,int reps, bool demo)
-{
-  int v1=0;
-  int temp;
-  unsigned char lambda=0;
-  for (int i = 0; i < reps; i++) 
-  {
-    temp=analogRead(AFRpin);
-    v1=v1+analogRead(AFRpin);
-    if(reps>1){delay(10);}
-  }
-  v1=v1/reps/4;
-  lambda=v1;  
-  if (demo==true) {lambda=random(120,130);} //Serial.println(lambda);
-  if (mazdamode==false && pid==20)  
-   {static unsigned char Lambda[8] = {4, 65, 20, lambda, 255, 0, 0, 0}; Lambda[3]=lambda;return Lambda;}//narrow
-  if (mazdamode==false && pid==36) 
-    {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}//wide
-  if (mazdamode==false && pid==52)  
-   {static unsigned char Lambda[8] = {4, 65, 52, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}//wide
-  else 
-   {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}
-}
-  
 unsigned char* getNTC(bool mazdamode, int reps, bool demo) 
 {
   int v1=0;
@@ -284,7 +254,7 @@ unsigned char* getNTC(bool mazdamode, int reps, bool demo)
   unsigned char temperature=0;
   for (int i = 0; i < reps; i++)
   {
-    temp=analogRead(IATpin);
+    //temp=analogRead(IATpin);
     v1=v1+analogRead(IATpin);
     if(reps>1){delay(10);}
     }
@@ -303,15 +273,58 @@ unsigned char* getNTC(bool mazdamode, int reps, bool demo)
     {static unsigned char CoolantTemp[8] = {temperature, 0, 0, 0, 0, 0, 0, 0}; CoolantTemp[0]=temperature; return CoolantTemp;} 
 }
 
+unsigned char* getTPS(bool mazdamode,int reps, bool demo)
+{
+  int v1=0;
+  int temp;
+  unsigned char tps=0;
+  for (int i = 0; i < reps; i++) 
+  {
+    //temp=analogRead(TPSpin);
+    v1=v1+analogRead(TPSpin);
+    if(reps>1){delay(10);}
+    }
+  v1=v1/reps/4;
+  tps=v1;
+  if (demo==true) {tps=random(0,200);} //Serial.println(tps); 
+  if (mazdamode==true)  {static unsigned char TPS[8] = {tps, 255, 255, 255, 255, 255, 255, 255};TPS[0]=tps; return TPS;}
+  else {static unsigned char TPS[8] = {4, 65, 17, tps, 0, 185, 147, 0};TPS[3]=tps; return TPS;}
+}
+
+unsigned char* getLambda(bool mazdamode, int pid,int reps, bool demo)
+{
+  int v1=0;
+  int temp;
+  unsigned char lambda=0;
+  for (int i = 0; i < reps; i++) 
+  {
+    //temp=analogRead(AFRpin);
+    v1=v1+analogRead(AFRpin);
+    if(reps>1){delay(10);}
+  }
+  v1=v1/reps/4;
+  lambda=v1;  
+  if (demo==true) {lambda=random(120,130);} //Serial.println(lambda);
+  if (mazdamode==false && pid==20)  
+   {static unsigned char Lambda[8] = {4, 65, 20, lambda, 255, 0, 0, 0}; Lambda[3]=lambda;return Lambda;}//narrow
+  if (mazdamode==false && pid==36) 
+    {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}//wide
+  if (mazdamode==false && pid==52)  
+   {static unsigned char Lambda[8] = {4, 65, 52, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}//wide
+  else 
+   {static unsigned char Lambda[8] = {4, 65, 36, lambda, 0, 0, 0, 0}; Lambda[3]=lambda; return Lambda;}
+}
+
 unsigned char* getRPM(bool mazdamode, int reps, bool demo)
 {
   float temp;
   int temp2;
   unsigned char rpm;
+  //temp2=currentRPM;
   temp2=RPMCalc();
   //Serial.print(temp2);
   //Serial.println(" RPM (da funcao)");
-  temp=355.0*temp2/16300.0;
+  temp=255.0*temp2/16300.0;
   //Serial.print(temp);
   //Serial.println(" RPM float[0-255}");
   rpm=min(temp,255);
@@ -327,7 +340,7 @@ unsigned char* getAdvance(bool mazdamode,int reps, bool demo)
   int temp;
   for (int i = 0; i < reps; i++) 
   {
-    temp=analogRead(MAFMAPpin);
+    //temp=analogRead(MAFMAPpin);
     v1=v1+analogRead(MAFMAPpin);
     if(reps>1){delay(10);}
   }
@@ -346,7 +359,7 @@ unsigned char* getBreakData(int reps, bool demo)
   unsigned char bs=0;
   for (int i = 0; i < reps; i++) 
   {
-    temp=analogRead(BRKPressurePin);
+    //temp=analogRead(BRKPressurePin);
     v1=v1+analogRead(BRKPressurePin);
     if(reps>1){delay(10);}
   }
@@ -354,6 +367,24 @@ unsigned char* getBreakData(int reps, bool demo)
   if (inputisBRKSwitch) {bs=v1;} else {bp=v1;}
   if (demo==true) {bp=random(0,100);bs=200*random(0,1);}
   static unsigned char BreakD[8] = {bp, 0, bs, 0, 0, 0, 0, 0}; BreakD[0]=bp; BreakD[2]=bs;return BreakD;
+}
+
+unsigned char* getClutchSwitch(int reps, bool demo)
+{
+  int v1=0;
+  int temp;
+  unsigned char sw=0;
+  for (int i = 0; i < reps; i++) 
+  {
+    //temp=analogRead(MAP2pin);
+    v1=v1+analogRead(MAP2pin);
+    if(reps>1){delay(10);}
+    }
+  v1=v1/reps/4;
+  if (v1<100) {v1=0;}
+  else {v1=255;}
+  sw=v1;
+  static unsigned char ClutchSw[8] = {0, sw, 0, 0, 0, 0, 0, 0}; ClutchSw[1]=sw;return ClutchSw;
 }
 
 void CANAnswer()
@@ -366,7 +397,6 @@ void CANAnswer()
     BuildMessage = BuildMessage + buf[i] + ",";
   }
 
-
   Serial.print("<");
   Serial.print(canId, HEX);
   Serial.print(",");
@@ -376,7 +406,7 @@ void CANAnswer()
   if(BuildMessage=="2,1,4,0,0,0,0,0," && !inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1, false)); Serial.println(">01 EngineLoad");}
   if(BuildMessage=="2,1,5,0,0,0,0,0," && inputisCoolantTemp)  {CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); Serial.println(">01 CoolantTemp");}
   if(BuildMessage=="2,1,11,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1,false)); Serial.println(">01 MAP");}
-  if(BuildMessage=="2,1,12,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,false)); Serial.println(">01 RPM");/*CAN_DataFrequency("Mode1");*/}
+  if(BuildMessage=="2,1,12,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,false)); Serial.println(">01 RPM");}
   if(BuildMessage=="2,1,14,0,0,0,0,0," && inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1,false)); Serial.println(">01 Advance");}
   if(BuildMessage=="2,1,15,0,0,0,0,0," && !inputisCoolantTemp){CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); Serial.println(">01 IAT");}
   if(BuildMessage=="2,1,16,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); Serial.println(">01 MAF");}
@@ -422,6 +452,54 @@ void CANAnswer()
   //if(BuildMessage=="3,34,0,60,0,0,0,0,")    {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(true,1,1,false)); Serial.println(">22h FuelLev");/*CAN_DataFrequency("Mode22");*/}
 }
 
+//Broadcast Rates MazdaSim
+int sendHcounter = 0; // com BDR=10 e HxL=10 40-50HZ/7HZ com  BDR=0 e HxL=10:314HZ/35HZ
+int sendLcounter = 0;
+int SendHRate=1; // Main Parameter for MAZDA SIM broadcast 
+int SendLxHRate=5; // number of times that low priority msgs are silenced SendRate=10,SendLxH=10:H45Hz,L7Hz); SendRate=0,SendHxL=10->H314Hz,L35Hz; SendRate=100,SendHXL=5->H5Hz,L1hz (com 3 variaveis pedidas em modo01 a 7hz)
+
+void MazdaECUbrodcast()
+{
+  if(mazdaECUOn==true) 
+  {
+    if(sendHcounter==SendHRate)
+    {
+      unsigned char* RPM=getRPM(true,1,false);
+      unsigned char rpm= RPM[0];
+      unsigned char* TPS=getTPS(true,1,false);
+      unsigned char tps= TPS[0];
+      unsigned char mazdaspeed=0;
+      unsigned char Mazda201[8] = {rpm, 1, 200 ,200, mazdaspeed, 0, min(tps,200), 0};
+      CAN.sendMsgBuf(0x201, 0, 8, Mazda201);
+      printA(Mazda201);
+      Serial.println("SentH: RPM,TPS, SPEED");
+      delay(0);
+      
+      CAN.sendMsgBuf(0x85, 0, 8, getBreakData(1,false)); 
+      Serial.println("SentH: Break data");
+      delay(0);
+      CAN.sendMsgBuf(0x231, 0, 8, getClutchSwitch(1,false)); 
+      Serial.println("SentH: clutch");
+      delay(0);
+      sendLcounter++;
+      sendHcounter=0;
+      //CAN.sendMsgBuf(0x4b0, 0, 8, Mazdawheelspeed); Serial.println(">H WheelSpeed");
+      //CAN_DataFrequency("MazdaH");
+    }
+    else {sendHcounter++;}
+    if(sendLcounter==SendLxHRate) 
+      {
+       //Put here LOW Priority msgs. sent quitetimes lesss
+        sendLcounter=0;
+        CAN.sendMsgBuf(0x421, 0, 8, getNTC(true,1,false)); Serial.println("SentL: CoolantTemp");
+        delay(0);
+        CAN.sendMsgBuf(0x240, 0, 8, getNTC(true,1,false)); Serial.println("SentL: IAT");
+        delay(0);
+      }
+    //CAN_DataFrequency("MazdaL");
+  }
+}
+
 //Calculo do Tempo de resposta millis()
 unsigned long StartTime = 0;
 unsigned long EndTime = 0;
@@ -456,50 +534,17 @@ void CAN_DataFrequency(String mark)
   }
 }
 
-//Broadcast Rates MazdaSim
-int sendHcounter = 0; // com BDR=10 e HxL=10 40-50HZ/7HZ com  BDR=0 e HxL=10:314HZ/35HZ
-int sendLcounter = 0;
-int SendHRate=100; // Main Parameter for MAZDA SIM broadcast 
-int SendLxHRate=5; // number of times that low priority msgs are silenced SendRate=10,SendLxH=10:H45Hz,L7Hz); SendRate=0,SendHxL=10->H314Hz,L35Hz; SendRate=100,SendHXL=5->H5Hz,L1hz (com 3 variaveis pedidas em modo01 a 7hz)
-
-void MazdaECUbrodcast()
+void RPMLimiter (int rpm)
 {
-  if(mazdaECUOn==true) 
-  {
-    if(sendHcounter==SendHRate)
-    {
-      unsigned char* RPM=getRPM(true,1,false);
-      unsigned char* TPS=getTPS(true,1,false);
-      unsigned char rpm= RPM[0];
-      unsigned char tps= TPS[0];
-      unsigned char mazdaspeed=0;
-      unsigned char Mazda201[8] = {rpm, 1, 200 ,200, mazdaspeed, 0, tps, 0};
-      CAN.sendMsgBuf(0x201, 0, 8, Mazda201);
-      printA(Mazda201);
-      Serial.println("SentH: RPM,TPS, SPEED");
-      delay(10);
-      
-      CAN.sendMsgBuf(0x85, 0, 8, getBreakData(1,false)); 
-      Serial.println("SentH: Break data");
-      sendLcounter++;
-      sendHcounter=0;
-      delay(10);
-      //CAN.sendMsgBuf(0x4b0, 0, 8, Mazdawheelspeed); Serial.println(">H WheelSpeed");
-      //CAN_DataFrequency("MazdaH");
-    }
-    else {sendHcounter++;}
-    if(sendLcounter==SendLxHRate) 
-      {
-       //Put here LOW Priority msgs. sent quitetimes lesss
-        sendLcounter=0;
-        CAN.sendMsgBuf(0x421, 0, 8, getNTC(true,1,false)); Serial.println("SentL: CoolantTemp");
-        delay(10);
-        CAN.sendMsgBuf(0x240, 0, 8, getNTC(true,1,false)); Serial.println("SentL: IAT");
-        delay(10);
-      }
-    //CAN_DataFrequency("MazdaL");
+  currentRPM=RPMCalc();
+  //if (useRPMLimiter==1 && currentRPM>(rpm-200)) 
+  if (currentRPM>(rpm-200)) 
+  {digitalWrite(RPMLimiterpin, HIGH);delay(5);
+    //Serial.println(currentRPM);
   }
+  else {digitalWrite(RPMLimiterpin, LOW); delay(5);}
 }
+
 
 void MazdaCanScan(int startHex, int EndHex, byte *msg, int dlay)
 {
@@ -523,21 +568,34 @@ void setup()
   pinMode(AFRpin, INPUT);
   pinMode(BRKPressurePin, INPUT);
   pinMode(RPMpin, INPUT);
-  
   pinMode(dataInPin, INPUT);
   //for HC165
   pinMode(loadPin, OUTPUT);
   pinMode(clockEnablePin, OUTPUT);
   pinMode(clockINPin, OUTPUT);
   pinMode(RPMLimiterpin, OUTPUT);
+  digitalWrite(RPMLimiterpin, HIGH);
+  readSensorDipswitch();
+  Serial.print(inputisAdvance);  
+  Serial.print(inputisMAP); 
+  Serial.print(inputisClutchSW);
+  Serial.print(inputisCoolantTemp);
+  Serial.print(inputisBRKSwitch);
+  Serial.print(useRPMLimiter);
+  Serial.print(mazdaECUOn);
+  Serial.println(rpmfromIGN);
   attachInterrupt(digitalPinToInterrupt(RPMpin), Pulse_Event, FALLING);  // Enable interruption pin 3 when going from HIGH to LOW.
   delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings stored we need a high enough value in micros() so if divided is not going to give negative values.
+
 }
 
 
 void loop() 
 {
-  //Serial.println(!inputisAdvance);
+  
+   //readSensorDipswitch();
+   //delay(3000);
+   //Serial.println(!inputisAdvance);
   //Serial.println("DIP0 InputisAdvance: "+ inputisAdvance); 
   //Serial.println("DIP1 MAF sensor: "+ !inputisMAP);
   //Serial.println("DIP1 inputisMAP: "+ inputisMAP); 
@@ -561,7 +619,7 @@ void loop()
   mazdaECUOn = false;
   rpmfromIGN = true;
   */
-  
+  RPMLimiter(7500);
   if(CAN_MSGAVAIL == CAN.checkReceive()) 
   {
     readSensorDipswitch();//check which AD inputs are active in board
@@ -572,10 +630,11 @@ void loop()
     //Serial.println("RESPONSE FINISHED");
     delay(100); //Good for RPM stability.breeding time for RPM mais rapido que o pedido do ELM no Scantool1.13
   } 
- 
   MazdaECUbrodcast();//MAZDASIM: BROADCAST MAZDA FORMAT DATA TO CAN_BUS
+  currentRPM=0;
   
-  if(sCAN==true) {byte Mazdatest[8] = {200,0,0,0,0,0,0,0}; MazdaCanScan( 0x0, 0xFF, Mazdatest, 5);} //Mazda SCAN IDs for reverse emginnering - RESPONDING IDs ON AIM
+  if(sCAN==true) {byte Mazdatest[8] = {200,0,0,0,0,0,0,0}; MazdaCanScan( 0x0, 0xFF, Mazdatest, 5);} //Mazda SCAN IDs for reverse enginnering - RESPONDING IDs ON AIM
+
 }
 
 
