@@ -548,7 +548,6 @@ void RPMLimiter (int rpm)
   else {digitalWrite(RPMLimiterpin, LOW); delay(5);}
 }
 
-
 void MazdaCanScan(int startHex, int EndHex, byte *msg, int dlay)
 {
   for (int id = startHex; id < EndHex; id++)
@@ -574,7 +573,6 @@ void setup()
   pinMode(dataInPin, INPUT);
   //for HC165
   pinMode(loadPin, OUTPUT);
-  //pinMode(clockEnablePin, OUTPUT);
   pinMode(clockINPin, OUTPUT);
   pinMode(RPMLimiterpin, OUTPUT);
   digitalWrite(clockINPin, LOW);
