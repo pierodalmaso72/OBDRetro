@@ -27,6 +27,7 @@ const int AFRpin = A4;  //Branco AFR signal in A4 (0-5V signal)
 const int BRKPressurePin= A5;  //Preto BreakPressure
 
 //DIP Switch : ON is OV and OFF is 5V from pullups. Logic value is inverted in 74HC165 reading.
+byte Dipswitch1;
 bool inputisAdvance=false; //ergo: is not MAP/MAF; logic value=!DIP[0]; inputA0
 bool inputisMAP=false; //ergo: is not MAF; logic value = DIP[1] inputA0
 bool inputisClutchSW=false; //ergo: is not MAP2; logic value = !DIP[2]; inputA1
@@ -44,7 +45,6 @@ const int RPMLimiterpin=8; //verde: testar pois parece afectado pelo estado do p
 
 //Digital Outputs Internal connection to 74HC165
 int loadPin=7; //Pin7 Branco: HC1-Parallel Load when low shift when High 
-int clockEnablePin=4;//Pin 4 Amarelo: HC15-CE or ClockInhibit when High, no changes in output
 int dataInPin=5; //Pin 5 Laranja: HC7-Q7 Complementary Serial Output (negated)
 int clockINPin=6;//Pin6 Azul: HC-2CP
 
@@ -144,10 +144,13 @@ void readSensorDipswitch ()
   digitalWrite(loadPin,HIGH);
   delayMicroseconds(5);
   //Get data from 74HC165
-  digitalWrite(clockINPin, HIGH);
-  digitalWrite(clockEnablePin, LOW);
-  byte Dipswitch1=shiftIn(dataInPin, clockINPin, MSBFIRST);
-  digitalWrite(clockEnablePin, HIGH);
+  for (int i = 0; i < 8; i++)
+  {
+    bitWrite(Dipswitch1,i,digitalRead(dataInPin));
+    digitalWrite(clockINPin, LOW);
+    digitalWrite(clockINPin, HIGH);
+  }
+  digitalWrite(clockINPin, LOW);
 //Set vars with dipswitches state
 inputisAdvance = bitRead(Dipswitch1,0);// ! bitRead(Dipswitch1,0); 
 inputisMAP = bitRead(Dipswitch1,1); 
@@ -571,9 +574,10 @@ void setup()
   pinMode(dataInPin, INPUT);
   //for HC165
   pinMode(loadPin, OUTPUT);
-  pinMode(clockEnablePin, OUTPUT);
+  //pinMode(clockEnablePin, OUTPUT);
   pinMode(clockINPin, OUTPUT);
   pinMode(RPMLimiterpin, OUTPUT);
+  digitalWrite(clockINPin, LOW);
   digitalWrite(RPMLimiterpin, HIGH);
   readSensorDipswitch();
   Serial.print(inputisAdvance);  
