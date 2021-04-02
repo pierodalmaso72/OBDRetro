@@ -27,7 +27,7 @@ const int AFRpin = A4;  //Branco AFR signal in A4 (0-5V signal)
 const int BRKPressurePin= A5;  //Preto BreakPressure
 
 //DIP Switch : ON is OV and OFF is 5V from pullups. Logic value is inverted in 74HC165 reading.
-byte Dipswitch1;
+byte Dipswitch1=B11111111;
 bool inputisAdvance=false; //ergo: is not MAP/MAF; logic value=!DIP[0]; inputA0
 bool inputisMAP=false; //ergo: is not MAF; logic value = DIP[1] inputA0
 bool inputisClutchSW=false; //ergo: is not MAP2; logic value = !DIP[2]; inputA1
@@ -149,19 +149,21 @@ void readSensorDipswitch ()
     bitWrite(Dipswitch1,i,digitalRead(dataInPin));
     digitalWrite(clockINPin, LOW);
     digitalWrite(clockINPin, HIGH);
+    //Serial.println(Dipswitch1, BIN);
   }
   digitalWrite(clockINPin, LOW);
+  Serial.print("DIP SWITCH: ");Serial.println(Dipswitch1, BIN);
 //Set vars with dipswitches state
-inputisAdvance = bitRead(Dipswitch1,0);// ! bitRead(Dipswitch1,0); 
-inputisMAP = bitRead(Dipswitch1,1); 
-inputisClutchSW = bitRead(Dipswitch1,2);//! bitRead(Dipswitch1,2); 
-inputisCoolantTemp = bitRead(Dipswitch1,3); 
-inputisBRKSwitch = bitRead(Dipswitch1,4);
-useRPMLimiter = !bitRead(Dipswitch1,5); //! bitRead(Dipswitch1,5); 
-mazdaECUOn =!bitRead(Dipswitch1,6);// ! bitRead(Dipswitch1,6); 
-rpmfromIGN = bitRead(Dipswitch1,7); 
-
-/*Serial.print(inputisAdvance);  
+inputisAdvance =      bitRead(Dipswitch1,7);// ! bitRead(Dipswitch1,0); 
+inputisMAP =          bitRead(Dipswitch1,6); 
+inputisClutchSW =     bitRead(Dipswitch1,5);//! bitRead(Dipswitch1,2); 
+inputisCoolantTemp =  bitRead(Dipswitch1,4); 
+inputisBRKSwitch =    bitRead(Dipswitch1,3);
+useRPMLimiter =       bitRead(Dipswitch1,2); //! bitRead(Dipswitch1,5); 
+mazdaECUOn =          bitRead(Dipswitch1,1);// ! bitRead(Dipswitch1,6); 
+rpmfromIGN =          bitRead(Dipswitch1,0); 
+/*
+Serial.print(inputisAdvance);  
 Serial.print(inputisMAP); 
 Serial.print(inputisClutchSW);
 Serial.print(inputisCoolantTemp);
@@ -169,7 +171,8 @@ Serial.print(inputisBRKSwitch);
 Serial.print(useRPMLimiter);
 Serial.print(mazdaECUOn);
 Serial.println(rpmfromIGN);
-delay(2000);*/
+delay(2000);
+*/
 }
 
 int RPMCalc() 
@@ -574,43 +577,58 @@ void setup()
   //for HC165
   pinMode(loadPin, OUTPUT);
   pinMode(clockINPin, OUTPUT);
-  pinMode(RPMLimiterpin, OUTPUT);
+  digitalWrite(loadPin, HIGH);
   digitalWrite(clockINPin, LOW);
+
+  pinMode(RPMLimiterpin, OUTPUT);
   digitalWrite(RPMLimiterpin, HIGH);
   readSensorDipswitch();
-  Serial.print(inputisAdvance);  
-  Serial.print(inputisMAP); 
-  Serial.print(inputisClutchSW);
-  Serial.print(inputisCoolantTemp);
-  Serial.print(inputisBRKSwitch);
-  Serial.print(useRPMLimiter);
-  Serial.print(mazdaECUOn);
-  Serial.println(rpmfromIGN);
+
   attachInterrupt(digitalPinToInterrupt(RPMpin), Pulse_Event, FALLING);  // Enable interruption pin 3 when going from HIGH to LOW.
   delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings stored we need a high enough value in micros() so if divided is not going to give negative values.
 
 }
 
-
 void loop() 
 {
   
-   //readSensorDipswitch();
-   //delay(3000);
-   //Serial.println(!inputisAdvance);
-  //Serial.println("DIP0 InputisAdvance: "+ inputisAdvance); 
-  //Serial.println("DIP1 MAF sensor: "+ !inputisMAP);
-  //Serial.println("DIP1 inputisMAP: "+ inputisMAP); 
-  //Serial.println("DIP2 NoMAP2 sensor: "+ !inputisClutchSW);
-  //Serial.println("DIP2 InputisClutch: "+inputisClutchSW); 
-  //Serial.println("DIP3 Input is IAT: "+ !inputisCoolantTemp);
-  //Serial.println("DIP3 InputisCoolantTemp: "+inputisCoolantTemp); 
-  //Serial.println("DIP4 Input is BreakPressure: "+ !inputisBRKSwitch);
-  //Serial.println("DIP4 InputisBRKSwitch: "+inputisBRKSwitch); 
-  //Serial.println("DIP5 useRPMLimiter: "+ useRPMLimiter);
-  //Serial.println("DIP6 mazdaECUOn: "+ mazdaECUOn); 
-  //Serial.println("DIP7 rpmfromIGN: "+ rpmfromIGN); 
-  //delay(100); 
+  RPMLimiter(7500);
+  
+  //OBD ANSWER MODE IF REQUESTS EXIST
+  if(CAN_MSGAVAIL == CAN.checkReceive()) 
+  {
+    answering=true;
+    delay(0); //Not good for RPM stability; slows ELM data request in mode 1 (by delaying answer)
+    CANAnswer();
+    BuildMessage="";
+    //Serial.println("RESPONSE FINISHED");
+    delay(100); //Good for RPM stability.breeding time for RPM mais rapido que o pedido do ELM no Scantool1.13
+  } 
+
+  //MAZDASIM: BROADCAST MAZDA FORMAT DATA TO CAN_BUS
+  if(mazdaECUOn) {MazdaECUbrodcast();}
+
+  // CANSCAN TO REVERSE ENGINEER
+  if(sCAN==true) {byte Mazdatest[8] = {200,0,0,0,0,0,0,0}; MazdaCanScan( 0x0, 0xFF, Mazdatest, 5);} //Mazda SCAN IDs for reverse enginnering - RESPONDING IDs ON AIM
+    
+  currentRPM=0;
+}
+
+
+
+
+
+
+  /*Serial.print("DIP1 InputisAdvance: "); Serial.println(inputisAdvance); 
+  Serial.print("DIP2 inputisMAP: "); Serial.println(inputisMAP); 
+  Serial.print("DIP3 InputisClutch: "); Serial.println(inputisClutchSW); 
+  Serial.print("DIP4 InputisCoolantTemp: "); Serial.println(+inputisCoolantTemp); 
+  Serial.print("DIP5 InputisBRKSwitch: "); Serial.println(inputisBRKSwitch); 
+  Serial.print("DIP6 useRPMLimiter: "); Serial.println(useRPMLimiter);
+  Serial.print("DIP7 mazdaECUOn: "); Serial.println(mazdaECUOn); 
+  Serial.print("DIP8 rpmfromIGN: "); Serial.println(rpmfromIGN); 
+  delay(500); 
+  */
   /*//TEST MODE OVERRIDING readsensorDip  
   inputisAdvance=false;
   inputisMAP = false; //with true: MAP sensor if is not MAF
@@ -621,23 +639,7 @@ void loop()
   mazdaECUOn = false;
   rpmfromIGN = true;
   */
-  RPMLimiter(7500);
-  if(CAN_MSGAVAIL == CAN.checkReceive()) 
-  {
-    readSensorDipswitch();//check which AD inputs are active in board
-    answering=true;
-    delay(0); //Not good for RPM stability; slows ELM data request in mode 1 (by delaying answer)
-    CANAnswer();
-    BuildMessage="";
-    //Serial.println("RESPONSE FINISHED");
-    delay(100); //Good for RPM stability.breeding time for RPM mais rapido que o pedido do ELM no Scantool1.13
-  } 
-  MazdaECUbrodcast();//MAZDASIM: BROADCAST MAZDA FORMAT DATA TO CAN_BUS
-  currentRPM=0;
-  
-  if(sCAN==true) {byte Mazdatest[8] = {200,0,0,0,0,0,0,0}; MazdaCanScan( 0x0, 0xFF, Mazdatest, 5);} //Mazda SCAN IDs for reverse enginnering - RESPONDING IDs ON AIM
-
-}
+ 
 
 
 /*MAZDA ID

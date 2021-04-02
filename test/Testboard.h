@@ -54,7 +54,7 @@ void printA (unsigned char myStr[8])
 void readSensorDipswitch ()  
 {
 
-Dipswitch1=!B00000000;
+//Dipswitch1=!B00000000;
 //Write pulse to load pin;
   digitalWrite(loadPin,LOW); //Pin7 Branco: HC1-Parallel Load when low shift when High
   delayMicroseconds(5);
@@ -68,14 +68,13 @@ Dipswitch1=!B00000000;
     bitWrite(Dipswitch1,i,digitalRead(dataInPin));
     digitalWrite(clockINPin, LOW);//Pin6 Azul: HC-2CP
     digitalWrite(clockINPin, HIGH);//Pin6 Azul: HC-2CP
-    Serial.println(Dipswitch1, BIN);
-    delay(100);
+    //Serial.println(Dipswitch1, BIN);
+    //delay(100);
   }
   digitalWrite(clockEnablePin, HIGH);
   digitalWrite(clockINPin, LOW);//Pin6 Azul: HC-2CP
   Serial.print("FINAL DIP: ");
   Serial.println(Dipswitch1, BIN);
-  delay (1000);
 } 
 
 void readAnalogInputs()
@@ -88,7 +87,8 @@ void readAnalogInputs()
     v1=5.0*v1/1024;
     Serial.print("A");Serial.print(i);Serial.print(": ");Serial.print(v1);Serial.println("V");
   }
-  Serial.println("");
+  Serial.println("");Serial.println("");Serial.println("");Serial.println("");Serial.println("");
+  Serial.println("");Serial.println("");Serial.println("");
   delay(1000);
 }
 
@@ -114,6 +114,8 @@ void setup()
   digitalWrite(clockINPin, LOW);
   digitalWrite(clockEnablePin, HIGH);
   digitalWrite(RPMLimiterpin, HIGH);
+  delay(500);
+  digitalWrite(RPMLimiterpin, LOW);
   Serial.println("setup done");
   delay(10);
 }
@@ -123,4 +125,6 @@ void loop()
 {
   readSensorDipswitch();
   delay(1000); 
+  readAnalogInputs();
+  
 } 
