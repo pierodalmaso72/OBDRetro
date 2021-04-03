@@ -56,8 +56,8 @@ const bool sCAN=false;
 
 // RPM Calibration:
 byte const PulsesPerRevolution = 4;  // Set how many pulses there are on each revolution. Default: 2.
-const unsigned long ZeroTimeout = 100000;  // For high response time, a good value would be 100000. For reading very low RPM, a good value would be 300000.
-byte const numReadings = 4;  // Calibration for smoothing RPM: Number of samples for smoothing. The higher, the more smoothing, but it's going to react slower to changes. 1 = no smoothing. Default: 2.
+const unsigned long ZeroTimeout = 200000;  // For high response time, a good value would be 100000. For reading very low RPM, a good value would be 300000.
+byte const numReadings = 2;  // Calibration for smoothing RPM: Number of samples for smoothing. The higher, the more smoothing, but it's going to react slower to changes. 1 = no smoothing. Default: 2.
 // RPM Variables:
 volatile unsigned long LastTimeWeMeasured;  // Stores the last time we measured a pulse so we can calculate the period.
 volatile unsigned long PeriodBetweenPulses = ZeroTimeout+1000;  // Stores the period between pulses in microseconds.// It has a big number so it doesn't start with 0 which would be interpreted as a high frequency.
@@ -326,8 +326,8 @@ unsigned char* getRPM(bool mazdamode, int reps, bool demo)
   float temp;
   int temp2;
   unsigned char rpm;
-  //temp2=currentRPM;
-  temp2=RPMCalc();
+  //temp2=RPMCalc();
+  temp2=currentRPM;
   //Serial.print(temp2);
   //Serial.println(" RPM (da funcao)");
   temp=255.0*temp2/16300.0;
@@ -403,27 +403,40 @@ void CANAnswer()
     BuildMessage = BuildMessage + buf[i] + ",";
   }
 
-  Serial.print("<");
-  Serial.print(canId, HEX);
-  Serial.print(",");
-  Serial.println(BuildMessage);
+  //Serial.print("<");
+ // Serial.print(canId, HEX);
+  //Serial.print(",");
+ // Serial.println(BuildMessage);
 
   //PID answers
-  if(BuildMessage=="2,1,4,0,0,0,0,0," && !inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1, false)); Serial.println(">01 EngineLoad");}
-  if(BuildMessage=="2,1,5,0,0,0,0,0," && inputisCoolantTemp)  {CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); Serial.println(">01 CoolantTemp");}
-  if(BuildMessage=="2,1,11,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1,false)); Serial.println(">01 MAP");}
-  if(BuildMessage=="2,1,12,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,false)); Serial.println(">01 RPM");}
-  if(BuildMessage=="2,1,14,0,0,0,0,0," && inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1,false)); Serial.println(">01 Advance");}
-  if(BuildMessage=="2,1,15,0,0,0,0,0," && !inputisCoolantTemp){CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); Serial.println(">01 IAT");}
-  if(BuildMessage=="2,1,16,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); Serial.println(">01 MAF");}
-  if(BuildMessage=="2,1,17,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1,false)); Serial.println(">01 TPS");}
-  if(BuildMessage=="2,1,20,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,20,1,false)); Serial.println(">01 AFR B1Volts (narrow)");}
-  if(BuildMessage=="2,1,52,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,52,1,false)); Serial.println(">01 AFR");}
-  if(BuildMessage=="2,1,36,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,36,1,false)); Serial.println(">01 Lambda");}
+  if(BuildMessage=="2,1,4,0,0,0,0,0," && !inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,true,1, false)); //Serial.println(">01 EngineLoad");
+  }
+  if(BuildMessage=="2,1,5,0,0,0,0,0," && inputisCoolantTemp)  {CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); //Serial.println(">01 CoolantTemp");
+  }
+  if(BuildMessage=="2,1,11,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1,false)); //Serial.println(">01 MAP");
+  }
+  if(BuildMessage=="2,1,12,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getRPM(false,1,false)); //Serial.println(">01 RPM");
+  }
+  if(BuildMessage=="2,1,14,0,0,0,0,0," && inputisAdvance)     {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(false,1,false)); //Serial.println(">01 Advance");
+  }
+  if(BuildMessage=="2,1,15,0,0,0,0,0," && !inputisCoolantTemp){CAN.sendMsgBuf(0x7E8, 0, 8, getNTC(false,1,false)); //Serial.println(">01 IAT");
+  }
+  if(BuildMessage=="2,1,16,0,0,0,0,0," && !inputisAdvance)    {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(false,false,1, false)); //Serial.println(">01 MAF");
+  }
+  if(BuildMessage=="2,1,17,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getTPS(false,1,false)); //Serial.println(">01 TPS");
+  }
+  if(BuildMessage=="2,1,20,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,20,1,false)); //Serial.println(">01 AFR B1Volts (narrow)");
+  }
+  if(BuildMessage=="2,1,52,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,52,1,false)); //Serial.println(">01 AFR");
+  }
+  if(BuildMessage=="2,1,36,0,0,0,0,0,")                       {CAN.sendMsgBuf(0x7E8, 0, 8, getLambda(false,36,1,false)); //Serial.println(">01 Lambda");
+  }
   
   //Mode0x22 answers
-  if(BuildMessage=="3,34,0,67,0,0,0,0,") {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(true,true,1,false)); Serial.println(">22h Load");}
-  if(BuildMessage=="3,34,0,14,0,0,0,0,") {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1,false)); Serial.println(">22h IgnAdv");}
+  if(BuildMessage=="3,34,0,67,0,0,0,0,") {CAN.sendMsgBuf(0x7E8, 0, 8, getAirFlow(true,true,1,false)); //Serial.println(">22h Load");
+  }
+  if(BuildMessage=="3,34,0,14,0,0,0,0,") {CAN.sendMsgBuf(0x7E8, 0, 8, getAdvance(true,1,false)); //Serial.println(">22h IgnAdv");
+  }
 
 
   //OBD2 MODE0x01 PID 0 DATA
@@ -435,15 +448,22 @@ void CANAnswer()
   unsigned char SupportedPID00v4[8] =   {4, 65, 0, 255, 255, 255, 254, 0};
   unsigned char MilCleared[7] =         {4, 65, 63, 34, 224, 185, 147};
   //Mode0x01 PID0x0
-  if(BuildMessage=="2,1,0,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(5); Serial.println(">01 PID0");
-                                                 /*CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4); Serial.println(">01 PID0 Extra");*/}
-  if(BuildMessage=="2,1,0,153,153,153,153,153,"){CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(5);  Serial.println(">01 PID0");
-                                                 CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4); Serial.println(">01 PID0 Extra");}
-  if(BuildMessage=="2,1,32,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID20); Serial.println(">01 PID0 0-20h");}
-  if(BuildMessage=="2,1,64,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID40); Serial.println(">01 PID0 20-40h");}
-  if(BuildMessage=="2,1,96,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID60); Serial.println(">01 PID0 40-60h");}
-  if(BuildMessage=="2,1,128,0,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID80); Serial.println(">01 PID0 60-80h");}
-  if(BuildMessage=="2,1,1,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 7, MilCleared); Serial.println(">01 PID1 MIL");}
+  if(BuildMessage=="2,1,0,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(5); //Serial.println(">01 PID0");
+                                                 /*CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4); Serial.println(">01 PID0 Extra");*/
+                                                 }
+  if(BuildMessage=="2,1,0,153,153,153,153,153,"){CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00); delay(5); // Serial.println(">01 PID0");
+                                                 CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID00v4);// Serial.println(">01 PID0 Extra");
+                                                 }
+  if(BuildMessage=="2,1,32,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID20); //Serial.println(">01 PID0 0-20h");
+                                                }
+  if(BuildMessage=="2,1,64,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID40); //Serial.println(">01 PID0 20-40h");
+                                                }
+  if(BuildMessage=="2,1,96,0,0,0,0,0,")         {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID60); //Serial.println(">01 PID0 40-60h");
+                                                }
+  if(BuildMessage=="2,1,128,0,0,0,0,0,")        {CAN.sendMsgBuf(0x7E8, 0, 8, SupportedPID80); //Serial.println(">01 PID0 60-80h");
+                                                }
+  if(BuildMessage=="2,1,1,0,0,0,0,0,")          {CAN.sendMsgBuf(0x7E8, 0, 7, MilCleared); //Serial.println(">01 PID1 MIL");
+                                                }
   
   //NOT USED
   //if(BuildMessage=="2,1,61,0,0,0,0,0,") {CAN.sendMsgBuf(0x7E8, 0, 8, getCATTemp(false,2,1,false)); Serial.println(">01 CTA2Temp");}
@@ -477,16 +497,15 @@ void MazdaECUbrodcast()
       unsigned char mazdaspeed=0;
       unsigned char Mazda201[8] = {rpm, 1, 200 ,200, mazdaspeed, 0, min(tps,200), 0};
       CAN.sendMsgBuf(0x201, 0, 8, Mazda201);
-      printA(Mazda201);
-      Serial.println("SentH: RPM,TPS, SPEED");
-      delay(0);
+      //printA(Mazda201);Serial.println("SentH: RPM,TPS, SPEED");
+      delay(1);
       
       CAN.sendMsgBuf(0x85, 0, 8, getBreakData(1,false)); 
-      Serial.println("SentH: Break data");
-      delay(0);
+      //Serial.println("SentH: Break data");
+      delay(1);
       CAN.sendMsgBuf(0x231, 0, 8, getClutchSwitch(1,false)); 
-      Serial.println("SentH: clutch");
-      delay(0);
+      //Serial.println("SentH: clutch");
+      delay(1);
       sendLcounter++;
       sendHcounter=0;
       //CAN.sendMsgBuf(0x4b0, 0, 8, Mazdawheelspeed); Serial.println(">H WheelSpeed");
@@ -497,10 +516,10 @@ void MazdaECUbrodcast()
       {
        //Put here LOW Priority msgs. sent quitetimes lesss
         sendLcounter=0;
-        CAN.sendMsgBuf(0x421, 0, 8, getNTC(true,1,false)); Serial.println("SentL: CoolantTemp");
-        delay(0);
-        CAN.sendMsgBuf(0x240, 0, 8, getNTC(true,1,false)); Serial.println("SentL: IAT");
-        delay(0);
+        CAN.sendMsgBuf(0x421, 0, 8, getNTC(true,1,false)); //Serial.println("SentL: CoolantTemp");
+        delay(1);
+        CAN.sendMsgBuf(0x240, 0, 8, getNTC(true,1,false)); //Serial.println("SentL: IAT");
+        delay(1);
       }
     //CAN_DataFrequency("MazdaL");
   }
@@ -542,13 +561,14 @@ void CAN_DataFrequency(String mark)
 
 void RPMLimiter (int rpm)
 {
-  currentRPM=RPMCalc();
+  //currentRPM=RPMCalc();
+  Serial.println(currentRPM);
   //if (useRPMLimiter==1 && currentRPM>(rpm-200)) 
   if (currentRPM>(rpm-200)) 
-  {digitalWrite(RPMLimiterpin, HIGH);delay(5);
+  {digitalWrite(RPMLimiterpin, HIGH);delay(1);
     //Serial.println(currentRPM);
   }
-  else {digitalWrite(RPMLimiterpin, LOW); delay(5);}
+  else {digitalWrite(RPMLimiterpin, LOW); delay(1);}
 }
 
 void MazdaCanScan(int startHex, int EndHex, byte *msg, int dlay)
@@ -583,15 +603,24 @@ void setup()
   pinMode(RPMLimiterpin, OUTPUT);
   digitalWrite(RPMLimiterpin, HIGH);
   readSensorDipswitch();
+  Serial.print("DIP1 InputisAdvance: "); Serial.println(inputisAdvance); 
+  Serial.print("DIP2 inputisMAP: "); Serial.println(inputisMAP); 
+  Serial.print("DIP3 InputisClutch: "); Serial.println(inputisClutchSW); 
+  Serial.print("DIP4 InputisCoolantTemp: "); Serial.println(+inputisCoolantTemp); 
+  Serial.print("DIP5 InputisBRKSwitch: "); Serial.println(inputisBRKSwitch); 
+  Serial.print("DIP6 useRPMLimiter: "); Serial.println(useRPMLimiter);
+  Serial.print("DIP7 mazdaECUOn: "); Serial.println(mazdaECUOn); 
+  Serial.print("DIP8 rpmfromIGN: "); Serial.println(rpmfromIGN);
 
   attachInterrupt(digitalPinToInterrupt(RPMpin), Pulse_Event, FALLING);  // Enable interruption pin 3 when going from HIGH to LOW.
-  delay(1000);  // We sometimes take several readings of the period to average. Since we don't have any readings stored we need a high enough value in micros() so if divided is not going to give negative values.
+  delay(20000);  // We sometimes take several readings of the period to average. Since we don't have any readings stored we need a high enough value in micros() so if divided is not going to give negative values.
 
 }
 
 void loop() 
 {
   
+  currentRPM=RPMCalc();
   RPMLimiter(7500);
   
   //OBD ANSWER MODE IF REQUESTS EXIST
@@ -602,7 +631,7 @@ void loop()
     CANAnswer();
     BuildMessage="";
     //Serial.println("RESPONSE FINISHED");
-    delay(100); //Good for RPM stability.breeding time for RPM mais rapido que o pedido do ELM no Scantool1.13
+    //delay(100); //Good for RPM stability.breeding time for RPM mais rapido que o pedido do ELM no Scantool1.13
   } 
 
   //MAZDASIM: BROADCAST MAZDA FORMAT DATA TO CAN_BUS
