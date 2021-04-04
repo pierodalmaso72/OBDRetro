@@ -55,7 +55,7 @@ bool sending=false;
 const bool sCAN=false;
 
 // RPM Calibration:
-byte const PulsesPerRevolution = 4;  // Set how many pulses there are on each revolution. Default: 2.
+byte const PulsesPerRevolution = 2;  // Set how many pulses there are on each revolution. Default: 2.
 const unsigned long ZeroTimeout = 200000;  // For high response time, a good value would be 100000. For reading very low RPM, a good value would be 300000.
 byte const numReadings = 2;  // Calibration for smoothing RPM: Number of samples for smoothing. The higher, the more smoothing, but it's going to react slower to changes. 1 = no smoothing. Default: 2.
 // RPM Variables:
@@ -236,7 +236,7 @@ unsigned char* getAirFlow (bool mazdamode,bool loadmode, int reps, bool demo)
     v1=v1+analogRead(MAFMAPpin);
     if (inputisClutchSW==false) 
     {temp=analogRead(MAP2pin);v2=analogRead(MAP2pin);}
-    if(reps>1){delay(10);}
+    if(reps>1){delay(2);}
   }
   v1=v1/reps/4;
   v2=v2/reps/4;
@@ -562,7 +562,7 @@ void CAN_DataFrequency(String mark)
 void RPMLimiter (int rpm)
 {
   //currentRPM=RPMCalc();
-  Serial.println(currentRPM);
+  //Serial.println(currentRPM);
   //if (useRPMLimiter==1 && currentRPM>(rpm-200)) 
   if (currentRPM>(rpm-200)) 
   {digitalWrite(RPMLimiterpin, HIGH);delay(1);
@@ -580,6 +580,23 @@ void MazdaCanScan(int startHex, int EndHex, byte *msg, int dlay)
     Serial.println(id);
     delay(dlay);
   }
+}
+
+void ADCVoltage(int apin)
+{
+  int input=0;
+  if (apin==0) {input=analogRead(MAFMAPpin);}
+  if (apin==1) {input=analogRead(MAP2pin);}
+  if (apin==2) {input=analogRead(IATpin);}
+  if (apin==3) {input=analogRead(TPSpin);}
+  if (apin==4) {input=analogRead(AFRpin);}
+  if (apin==5) {input=analogRead(BRKPressurePin);}
+  float voltage=input/1023.0*5.0;
+  Serial.print("IN");
+  Serial.print(apin);
+  Serial.print(": ");
+  Serial.print(voltage);
+  Serial.println("V");
 }
 
 void setup()
@@ -622,6 +639,8 @@ void loop()
   
   currentRPM=RPMCalc();
   RPMLimiter(7500);
+  ADCVoltage(0);
+
   
   //OBD ANSWER MODE IF REQUESTS EXIST
   if(CAN_MSGAVAIL == CAN.checkReceive()) 
